@@ -130,6 +130,7 @@
 #include <kernel/ContinuityMassHOElemKernel.h>
 
 //mms kernels
+#include <user_functions/TGMMSElemKernel.h>
 #include <user_functions/TGMMSHOElemKernel.h>
 
 
@@ -169,6 +170,8 @@
 #include <user_functions/VariableDensityContinuitySrcNodeSuppAlg.h>
 #include <user_functions/VariableDensityMomentumSrcElemSuppAlg.h>
 #include <user_functions/VariableDensityMomentumSrcNodeSuppAlg.h>
+
+#include <user_functions/TGMMSMomentumSrcNodeSuppAlg.h>
 
 #include <user_functions/VariableDensityMomentumMMSHOElemKernel.h>
 #include <user_functions/VariableDensityContinuityMMSHOElemKernel.h>
@@ -1322,6 +1325,10 @@ MomentumEquationSystem::register_interior_algorithm(
       ("lumped_EarthCoriolis",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_, dataPreReqs, true);
 
+    kb.build_topo_kernel_if_requested<TGMMSElemKernel>
+      ("tgmms",
+        realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqs);
+
     kb.build_sgl_kernel_if_requested<MomentumAdvDiffHOElemKernel>
       ("experimental_ho_advection_diffusion",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_,
@@ -1439,6 +1446,9 @@ MomentumEquationSystem::register_interior_algorithm(
           }
           else if ( sourceName == "EarthCoriolis") {
             suppAlg = new MomentumCoriolisSrcNodeSuppAlg(realm_);
+          }
+          else if ( sourceName == "tgmms") {
+            suppAlg = new TGMMSMomentumSrcNodeSuppAlg(realm_);
           }
           else {
             throw std::runtime_error("MomentumNodalSrcTerms::Error Source term is not supported: " + sourceName);
