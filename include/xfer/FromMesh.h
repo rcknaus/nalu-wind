@@ -40,6 +40,7 @@ class BulkData;
 namespace sierra{
 namespace nalu{
 
+
 class FromMesh {
 public :
   typedef stk::mesh:: Entity                          Entity;
@@ -243,6 +244,8 @@ public :
 
   Entity entity(const EntityKey k) const
   { return fromBulkData_.get_entity(k); }
+
+
 
   const stk::mesh::MetaData &fromMetaData_;
         stk::mesh::BulkData &fromBulkData_;

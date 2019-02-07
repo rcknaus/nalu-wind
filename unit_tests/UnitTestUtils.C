@@ -518,7 +518,7 @@ double initialize_linear_scalar_field(
 {
   // q = a + b^T x + 1/2 x^T H x
   std::mt19937 rng;
-  rng.seed(0); // fixed seed
+  rng.seed(std::random_device()()); // fixed seed
   std::uniform_real_distribution<double> coeff(-1.0, 1.0);
 
   double a  = coeff(rng);

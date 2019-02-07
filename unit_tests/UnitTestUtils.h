@@ -53,6 +53,11 @@ double vector_norm(const std::vector<double> & vec, const stk::ParallelMachine& 
 
 double global_norm(const double & norm, const size_t & N, const stk::ParallelMachine& comm = MPI_COMM_WORLD);
 
+double initialize_linear_scalar_field(
+  const stk::mesh::BulkData& bulk,
+  const VectorFieldType& coordField,
+  const ScalarFieldType& qField);
+
 double initialize_quadratic_scalar_field(const stk::mesh::BulkData& bulk,
                                       const VectorFieldType& coordField,
                                       const ScalarFieldType& qField);

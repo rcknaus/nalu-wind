@@ -42,6 +42,7 @@ add_sources(GlobalUnitSourceList
    UnitTestSingleHexPromotion.C
    UnitTestSpinnerLidarPattern.C
    UnitTestSuppAlgDataSharing.C
+   UnitTestTransferAll.C
    UnitTestTpetra.C
    UnitTestUtils.C
 )

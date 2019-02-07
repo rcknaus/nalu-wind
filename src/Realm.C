@@ -140,6 +140,8 @@
 #include <NaluParsing.h>
 #include <NaluParsingHelper.h>
 
+#include <xfer/ElemToNodeTransfer.h>
+
 // basic c++
 #include <map>
 #include <cmath>
@@ -429,6 +431,9 @@ Realm::initialize()
   if (doPromotion_) {
     setup_element_promotion();
   }
+//  outputInfo_->activateRestart_ =true;
+
+
   // field registration
   setup_nodal_fields();
   setup_edge_fields();
@@ -653,6 +658,12 @@ Realm::load(const YAML::Node & node)
   inputDBName_ = node["mesh"].as<std::string>() ;
   get_if_present(node, "type", type_, type_);
 
+  get_if_present(node, "restart_base_mesh_name", restartBaseMeshName_, restartBaseMeshName_);
+  if (node["restart_base_mesh_name"]) {
+    restartBaseMeshName_ = node["restart_base_mesh_name"].as<std::string>();
+    supportInterpolatedRestart_ = true;
+  }
+
   // provide a high level banner
   NaluEnv::self().naluOutputP0() << std::endl;
   NaluEnv::self().naluOutputP0() << "Realm Options Review: " << name_ << std::endl;
@@ -744,7 +755,6 @@ Realm::load(const YAML::Node & node)
     // only set from input file if command-line didn't set it
     root()->setSerializedIOGroupSize(outputInfo_->serializedIOGroupSize_);
   }
-
 
   // Parse catalyst input file if requested
   if(!outputInfo_->catalystFileName_.empty())
@@ -2070,7 +2080,7 @@ Realm::create_mesh()
 
   // Initialize meta data (from exodus file); can possibly be a restart file..
   inputMeshIdx_ = ioBroker_->add_mesh_database( 
-   inputDBName_, restarted_simulation() ? stk::io::READ_RESTART : stk::io::READ_MESH );
+   inputDBName_, restarted_simulation() && !supportInterpolatedRestart_ ? stk::io::READ_RESTART : stk::io::READ_MESH );
   ioBroker_->create_input_mesh();
 
   // declare an exposed part for later bc coverage check
@@ -2212,7 +2222,7 @@ Realm::create_restart_mesh()
         // add the field for a restart output
         ioBroker_->add_field(restartFileIndex_, *theField, varName);
         // if this is a restarted simulation, we will need input
-        if ( restarted_simulation() )
+        if ( restarted_simulation()  && !supportInterpolatedRestart_ )
           ioBroker_->add_input_field(stk::io::MeshField(*theField, varName));
       }
     }
@@ -3369,6 +3379,83 @@ Realm::boundary_data_to_state_data()
   equationSystems_.boundary_data_to_state_data();
 }
 
+
+
+double
+Realm::populate_new_mesh_from_restart(double& dtNm1, int& tCount)
+{
+  if (!supportInterpolatedRestart_) {
+    return -1;
+  }
+
+
+  stk::mesh::MetaData metaOldMesh(spatialDimension_);
+  stk::mesh::BulkData bulkOldMesh(metaOldMesh, NaluEnv::self().parallel_comm());
+  stk::io::StkMeshIoBroker ioBrokerOldMesh(NaluEnv::self().parallel_comm());
+  ioBrokerOldMesh.set_bulk_data(bulkOldMesh);
+
+  if (autoDecompType_ != "None") {
+    ioBrokerOldMesh.property_add(Ioss::Property("DECOMPOSITION_METHOD", autoDecompType_));
+  }
+
+  ioBrokerOldMesh.add_mesh_database(restartBaseMeshName_, stk::io::READ_RESTART);
+  ioBrokerOldMesh.create_input_mesh();
+
+    for (auto name : outputInfo_->restartFieldNameSet_) {
+      NaluEnv::self().naluOutputP0() << "Restart field name: " << name << std::endl;
+    }
+
+//  for (auto name : outputInfo_->restartFieldNameSet_) {
+//    auto& field = *stk::mesh::get_field_by_name(name,*metaData_);
+//    if (field.entity_rank() == stk::topology::NODE_RANK) {
+//      if (field.max_size(stk::topology::NODE_RANK) == 1u) {
+//        auto& fieldOnOldMesh = metaOldMesh.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, name, field.number_of_states());
+//        stk::mesh::put_field_on_mesh(fieldOnOldMesh, metaOldMesh.universal_part(), 1, nullptr);
+//        ioBrokerOldMesh.add_input_field({*stk::mesh::get_field_by_name(name,*metaData_), name});
+//      }
+//      else if (field.max_size(stk::topology::NODE_RANK) == spatialDimension_) {
+//        auto& fieldOnOldMesh = metaOldMesh.declare_field<VectorFieldType>(stk::topology::NODE_RANK, name, field.number_of_states());
+//        stk::mesh::put_field_on_mesh(fieldOnOldMesh, metaOldMesh.universal_part(), spatialDimension_, nullptr);
+//        ioBrokerOldMesh.add_input_field({*stk::mesh::get_field_by_name(name,*metaData_), name});
+//
+//      }
+//      else {
+//        //       auto& fieldOnOldMesh = metaOldMesh.declare_field<GenericFieldType>(stk::topology::NODE_RANK, name, field.number_of_states());
+//        //       stk::mesh::put_field_on_mesh(fieldOnOldMesh, metaOldMesh.universal_part(), field.max_size(stk::topology::NODE_RANK), nullptr);
+//      }
+//    }
+//  }
+  ioBrokerOldMesh.add_all_mesh_fields_as_input_fields();
+  ioBrokerOldMesh.populate_bulk_data();
+
+  std::vector<stk::io::MeshField> missingFields;
+  const double restartTime = ioBrokerOldMesh.read_defined_input_fields(10.0, &missingFields);
+  ioBrokerOldMesh.populate_field_data();
+
+  auto selector = !get_inactive_selector();
+  NaluEnv::self().naluOutputP0() << "Interpolating restart data from "
+      << restartBaseMeshName_ << " to " << inputDBName_ << " . . . " << std::endl;
+
+  std::string fieldname = "pressure";
+  auto& oldDens = *metaOldMesh.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "temperature");//->field_of_state(stk::mesh::StateNP1);
+  auto& newDens = *metaData_ ->get_field<ScalarFieldType>(stk::topology::NODE_RANK, "temperature");//->field_of_state(stk::mesh::StateNP1);
+
+  NaluEnv::self().naluOutputP0() << "Transferring restart data to new mesh . . . = "
+      << stk::mesh::field_amax(newDens, metaData_->universal_part()) << " vs " << stk::mesh::field_amax(oldDens, metaOldMesh.universal_part())
+     << std::endl;
+  transfer::transfer_all(bulkOldMesh, selector, bulk_data(), selector);
+  NaluEnv::self().naluOutputP0() << "Done = " <<   stk::mesh::field_amax(newDens, metaData_->universal_part())  << std::endl;
+
+  if ( NULL != turbulenceAveragingPostProcessing_ ) {
+    ioBrokerOldMesh.get_global("currentTimeFilter", turbulenceAveragingPostProcessing_->currentTimeFilter_, false);
+  }
+
+  ioBrokerOldMesh.get_global("timeStepNm1", dtNm1, false);
+  ioBrokerOldMesh.get_global("timeStepCount", tCount, false);
+
+  return restartTime;
+}
+
 //--------------------------------------------------------------------------
 //-------- populate_restart ------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3376,6 +3463,7 @@ double
 Realm::populate_restart(
   double &timeStepNm1, int &timeStepCount)
 {
+  if (supportInterpolatedRestart_) return -1;
   double foundRestartTime = get_current_time();
   if ( restarted_simulation() ) {
     // allow restart to skip missed required fields
@@ -3400,6 +3488,7 @@ Realm::populate_restart(
     const bool abortIfNotFound = false;
     ioBroker_->get_global("timeStepNm1", timeStepNm1, abortIfNotFound);
     ioBroker_->get_global("timeStepCount", timeStepCount, abortIfNotFound);
+
     if ( NULL != turbulenceAveragingPostProcessing_ ) {
       ioBroker_->get_global("currentTimeFilter", turbulenceAveragingPostProcessing_->currentTimeFilter_, abortIfNotFound);
     }

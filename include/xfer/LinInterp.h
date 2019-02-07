@@ -79,7 +79,7 @@ template <class FROM, class TO>  void LinInterp<FROM,TO>::filter_to_nearest (
     // load nodal coordinates from node
     const double * tocoords = stk::mesh::field_data(*tocoordinates, theNode );
 
-    std::pair<iterator, iterator> keys=RangeToDomain.equal_range(current_key->first);
+    std::pair<iterator, iterator> keys = RangeToDomain.equal_range(current_key->first);
     iterator nearest = keys.second;
 
     size_t candidateBoundingBoxSize = 0;
@@ -92,7 +92,7 @@ template <class FROM, class TO>  void LinInterp<FROM,TO>::filter_to_nearest (
       // extract master element from the bucket in which the element resides
       const stk::mesh::Bucket &theBucket = fromBulkData.bucket(theElem);
       const stk::topology &theElemTopo = theBucket.topology();
-      MasterElement *meSCS = sierra::nalu::MasterElementRepo::get_surface_master_element(theElemTopo);
+      MasterElement *meSCS = MasterElementRepo::get_surface_master_element(theElemTopo);
 
       // load nodal coordinates from element
       stk::mesh::Entity const* elem_node_rels = fromBulkData.begin_nodes(theElem);

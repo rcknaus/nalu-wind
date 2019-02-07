@@ -1301,6 +1301,7 @@ MomentumEquationSystem::register_interior_algorithm(
       ("NSO_2ND_SIJ",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_, dataPreReqs);
 
+
     kb.build_topo_kernel_if_requested<MomentumNSOElemKernel>
       ("NSO_4TH",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_, dudx_,

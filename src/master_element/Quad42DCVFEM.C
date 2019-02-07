@@ -504,7 +504,7 @@ void Quad42DSCS::determinant(
   {
     const DoubleType x2 = coord_mid_face[kx][0];
     const DoubleType y2 = coord_mid_face[ky][0];
-    const DoubleType rr = a1 + a2*(x1+x2) + a3*(y1+y2);
+    const DoubleType rr = a1 + a2 * (x1 + x2) + a3 * (y1 + y2);
     areav(0,kx) = -(y2 - y1)*rr;
     areav(0,ky) =  (x2 - x1)*rr;
   }

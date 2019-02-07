@@ -506,6 +506,11 @@ class Realm {
   // sometimes restarts can be missing states or dofs
   bool supportInconsistentRestart_;
 
+  double populate_new_mesh_from_restart(double&, int&);
+  bool supportInterpolatedRestart_{false};
+  std::string restartBaseMeshName_{"none"};
+
+
   bool doBalanceNodes_;
   struct BalanceNodeOptions
   {

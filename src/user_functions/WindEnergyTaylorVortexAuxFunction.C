@@ -76,9 +76,9 @@ WindEnergyTaylorVortexAuxFunction::do_evaluate(
   const unsigned /*beginPos*/,
   const unsigned /*endPos*/) const
 {
-  const double tHat = (visc_ > 1.0e-30) ? time * beta_ / rVortex_ : 0.0; // zero out viscous terms if mu ~ 0
-  const double Re = (visc_ > 1.0e-30) ? density_ * beta_ * rVortex_ / visc_ : 0.0; // zero out viscous terms if mu ~ 0
-  const double tFac = 1.0 + 2.0 * tHat / Re;
+  const double tHat = time * beta_ / rVortex_; // zero out viscous terms if mu ~ 0
+  const double Re = (visc_ > 1.0e-30) ? density_ * beta_ * rVortex_ / visc_ : 1;
+  const double tFac = (visc_ > 1.0e-30) ? 1.0 + 2.0 * tHat / Re : 1.0;
   for(unsigned p=0; p < numPoints; ++p) {
     const double cX = coords[0];
     const double cY = coords[1];

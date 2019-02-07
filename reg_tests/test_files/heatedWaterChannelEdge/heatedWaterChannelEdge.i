@@ -27,7 +27,7 @@ linear_solvers:
 realms:
 
   - name: realm_1
-    mesh: ../../mesh/waterChannel_mks.g
+    mesh: ./waterChannel_mks.g
     use_edges: yes
 
     equation_systems:
@@ -149,82 +149,7 @@ realms:
             velocity: 200.0
             enthalpy: 4.02
 
-    turbulence_averaging:
-      time_filter_interval: 100000.0
-
-      specifications:
-
-        - name: one
-          target_name: block_10
-          reynolds_averaged_variables:
-            - velocity
-            - enthalpy
-            - resolved_turbulent_ke
-
-          favre_averaged_variables:
-            - velocity
-            - enthalpy
-            - resolved_turbulent_ke
-
-          compute_tke: yes 
-          compute_reynolds_stress: yes
-          compute_q_criterion: yes
-          compute_vorticity: yes
-          compute_lambda_ci: yes
-
-        - name: two
-          target_name: surface_5
-          reynolds_averaged_variables:
-            - normal_heat_flux
-          favre_averaged_variables:
-            - normal_heat_flux
-
-    data_probes:
-
-      output_frequency: 5
-
-      search_method: stk_kdtree
-      search_tolerance: 1.0e-3
-      search_expansion_factor: 2.0
-
-      specifications:
-
-        - name: probe_volume 
-          from_target_part: block_10
-
-          line_of_site_specifications:
-            - name: probeOne 
-              number_of_points: 20
-              tip_coordinates: [0.44, 0.0]
-              tail_coordinates: [0.44, 0.03]
-
-            - name: probeTwo
-              number_of_points: 25
-              tip_coordinates: [0.48, 0.0]
-              tail_coordinates: [0.48, 0.03]
-
-            - name: probeThree
-              number_of_points: 40
-              tip_coordinates: [0.459, 6.78e-2]
-              tail_coordinates: [0.371, 0.0252]
-
-          output_variables:
-            - field_name: velocity
-              field_size: 2
-
-        - name: probe_surface
-          from_target_part: block_10 
-
-          line_of_site_specifications:
-            - name: probeFour 
-              number_of_points: 40
-              tip_coordinates: [0.50, 0.0]
-              tail_coordinates: [0.50, 0.03]
-
-          output_variables:
-            - field_name: temperature
-              field_size: 1
-
+  
     output:
       output_data_base_name: heatedWaterChannelEdge.e
       output_frequency: 5

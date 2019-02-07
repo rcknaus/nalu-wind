@@ -223,7 +223,7 @@ realms:
             turbulent_ke: tanh
 
         - peclet_function_tanh_transition:
-            velocity: 50000.0
+            velocity: 500.0
             enthalpy: 2.0
             turbulent_ke: 2.0
 
@@ -239,9 +239,9 @@ realms:
 
 
     output:
-      output_data_base_name: abl_5km_5km_1km_neutral.e
+      output_data_base_name: sabl_5km_5km_1km_neutral.e
       output_frequency: 10
-      output_nodse_set: no
+      output_nodset_set: yes
       output_variables:
        - velocity
        - pressure

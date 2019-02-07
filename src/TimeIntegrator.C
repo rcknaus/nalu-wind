@@ -178,6 +178,10 @@ TimeIntegrator::integrate_realm()
     currentTime_ = std::max(currentTime_, (*ii)->populate_restart(timeStepNm1_, timeStepCount_));
   }
 
+  for ( ii = realmVec_.begin(); ii!=realmVec_.end(); ++ii) {
+    currentTime_ = std::max(currentTime_, (*ii)->populate_new_mesh_from_restart(timeStepNm1_, timeStepCount_));
+  }
+
   // populate data from transfer; init, io and external
   for ( ii = realmVec_.begin(); ii!=realmVec_.end(); ++ii) {
     (*ii)->process_initialization_transfer();
@@ -197,6 +201,7 @@ TimeIntegrator::integrate_realm()
     (*ii)->process_external_data_transfer();
   }
   
+
   // nm1 dt from possible restart always prevails; input file overrides for fixed time stepping
   if ( adaptiveTimeStep_ ) {
     timeStepN_ = timeStepNm1_;
