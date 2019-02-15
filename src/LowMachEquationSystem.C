@@ -126,6 +126,9 @@
 #include <kernel/MomentumMassHOElemKernel.h>
 #include <kernel/MomentumAdvDiffHOElemKernel.h>
 #include <kernel/MomentumBuoyancySrcHOElemKernel.h>
+#include <kernel/MomentumBuoyancyBoussinesqSrcHOElemKernel.h>
+#include <kernel/MomentumCoriolisSrcHOElemKernel.h>
+
 #include <kernel/PressurePoissonHOElemKernel.h>
 #include <kernel/ContinuityMassHOElemKernel.h>
 
@@ -1372,9 +1375,16 @@ MomentumEquationSystem::register_interior_algorithm(
       ("experimental_ho_buoyancy",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
+    kb.build_sgl_kernel_if_requested<MomentumBuoyancyBoussinesqSrcHOElemKernel>
+      ("experimental_ho_buoyancy_boussinesq",
+        realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
+
+    kb.build_sgl_kernel_if_requested<MomentumCoriolisSrcHOElemKernel>
+      ("experimental_ho_EarthCoriolis",
+        realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
+
     kb.report();
- 
-  }
+   }
 
   // Check if the user has requested CMM or LMM algorithms; if so, do not
   // include Nodal Mass algorithms

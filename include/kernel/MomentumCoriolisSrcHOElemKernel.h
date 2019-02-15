@@ -6,14 +6,16 @@
 /*------------------------------------------------------------------------*/
 
 
-#ifndef MomentumBuoyancyBoussinesqSrcHOElemKernel_h
-#define MomentumBuoyancyBoussinesqSrcHOElemKernel_h
+#ifndef MomentumCoriolisSrcHOElemKernel_h
+#define MomentumCoriolisSrcHOElemKernel_h
 
 #include <kernel/Kernel.h>
 #include <AlgTraits.h>
 
 #include <master_element/TensorProductCVFEMOperators.h>
 #include <CVFEMTypeDefs.h>
+#include <CoriolisSrc.h>
+
 
 #include <FieldTypeDef.h>
 
@@ -29,11 +31,11 @@ class ElemDataRequests;
 class TimeIntegrator;
 
 template<class AlgTraits>
-class MomentumBuoyancyBoussinesqSrcHOElemKernel final : public Kernel
+class MomentumCoriolisSrcHOElemKernel final : public Kernel
 {
 DeclareCVFEMTypeDefs(CVFEMViews<AlgTraits::polyOrder_>);
 public:
-  MomentumBuoyancyBoussinesqSrcHOElemKernel(
+  MomentumCoriolisSrcHOElemKernel(
     const stk::mesh::BulkData& bulkData,
     SolutionOptions& solnOpts,
     ElemDataRequests& dataPreReqs);
@@ -46,15 +48,15 @@ public:
 
 private:
   const double rhoRef_;
-  const std::array<double,3> gravity_;
-  const double tRef_;
-  const double beta_;
+  const CoriolisSrc cor_;
 
   VectorFieldType* coordinates_{nullptr};
-  ScalarFieldType* temperatureField_{nullptr};
-
+  ScalarFieldType* density_{nullptr};
+  VectorFieldType* velocity_{nullptr};
 
   CVFEMOperators<AlgTraits::polyOrder_> ops_;
+
+
 };
 
 } // namespace nalu
