@@ -84,6 +84,26 @@ ScalarDiffHOElemKernel<AlgTraits>::execute(
   timer_resid += std::chrono::duration_cast<std::chrono::duration<double>>(end_time_resid - start_time_resid).count();
 }
 
+template <typename AlgTraits> void
+ScalarDiffHOElemKernel<AlgTraits>::execute(nodal_scalar_view& rhs, ScratchViewsHO<DoubleType>& scratchViews)
+{
+  auto v_coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
+  auto v_diff = scratchViews.get_scratch_view<nodal_scalar_view>(*diffFluxCoeff_);
+
+  scs_vector_workview work_metric(0);
+  auto& metric = work_metric.view();
+
+  auto v_coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
+  auto v_diff = scratchViews.get_scratch_view<nodal_scalar_view>(*diffFluxCoeff_);
+
+  high_order_metrics::compute_diffusion_metric_linear(ops_, v_coords, v_diff, metric);
+
+  auto scalar = scratchViews.get_scratch_view<nodal_scalar_view>(*scalarQ_);
+  tensor_assembly::scalar_diffusion_rhs(ops_, metric, scalar, rhs);
+
+}
+
+
 INSTANTIATE_KERNEL_HOSGL(ScalarDiffHOElemKernel)
 
 } // namespace nalu

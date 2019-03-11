@@ -337,8 +337,8 @@ void scalar_diffusion_rhs(
   constexpr int n1D = poly_order + 1;
   constexpr int nscs = poly_order;
 
-  nodal_vector_workview<poly_order, Scalar> l_grad_phi;
-  auto& grad_phi_scs = l_grad_phi.view();
+  nodal_vector_workview<poly_order, Scalar> work_grad_phi;
+  auto& grad_phi_scs = work_grad_phi.view();
 
   nodal_scalar_workview<poly_order, Scalar> work_integrand;
   auto& integrand = work_integrand.view();
@@ -348,8 +348,8 @@ void scalar_diffusion_rhs(
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < nscs; ++i) {
         integrand(k,j,i) = metric(XH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                           + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                           + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                         + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                         + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }
@@ -360,8 +360,8 @@ void scalar_diffusion_rhs(
     for (int j = 0; j < nscs; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i) = metric(YH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                           + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                           + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }
@@ -372,8 +372,8 @@ void scalar_diffusion_rhs(
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i) = metric(ZH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                           + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                           + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }

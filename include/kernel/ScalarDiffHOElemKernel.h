@@ -38,17 +38,19 @@ public:
     ScalarFieldType *diffFluxCoeff,
     ElemDataRequests& dataPreReqs);
 
-  ~ScalarDiffHOElemKernel()
-  {
-    std::cout << "\n---- time_diff: " << timer_diff << ", time_jac: "
-        << timer_jac << ", timer_resid: " << timer_resid << "\n----" << std::endl;
-  }
+  ~ScalarDiffHOElemKernel() = default;
+
+  const ScalarFieldType& solution_field() { return *scalarQ_; }
 
   using Kernel::execute;
   void execute(
     SharedMemView<DoubleType**>&,
     SharedMemView<DoubleType*>&,
     ScratchViewsHO<DoubleType>&) final;
+
+
+  void mfexecute(nodal_scalar_view& rhs, ScratchViewsHO<DoubleType>& scratchViews);
+
 
 private:
   ScalarFieldType *scalarQ_{nullptr};

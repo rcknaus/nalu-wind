@@ -5,7 +5,7 @@
 /*  directory structure                                                   */
 /*------------------------------------------------------------------------*/
 
-
+#include "ElemDataRequests.h"
 #include <TpetraLinearSystem.h>
 #include <NonConformalInfo.h>
 #include <NonConformalManager.h>
@@ -67,8 +67,33 @@
 
 #include <sstream>
 #define KK_MAP
+
+namespace sierra { namespace nalu { using TpetraMap = Tpetra::Map<double, int32_t, int64_t>; } }
+namespace sierra { namespace nalu { using TpetraOperator = Tpetra::Operator<double, int32_t, int64_t>; } }
+namespace sierra { namespace nalu { using TpetraVector = Tpetra::Vector<double, int32_t, int64_t, Node>; } }
+
 namespace sierra{
 namespace nalu{
+
+class MFOps : Tpetra::Operator<double, int32_t, int64_t>
+{
+
+private:
+ Teuchos::RCP<LinSys::Map> rowMap_;
+};
+
+template <typename KernelType>
+void matrix_vector_product(
+  const TimeIntegrator& tIntegrator,
+  const stk::mesh::BulkData& bulk,
+  const LinSys::Map& rowMap,
+  const TpetraVector& x,
+  TpetraVector& y)
+{
+
+
+
+}
 
 #define GID_(gid, ndof, idof)  ((ndof)*((gid)-1)+(idof)+1)
 #define LID_(lid, ndof, idof)  ((ndof)*((lid))+(idof))
