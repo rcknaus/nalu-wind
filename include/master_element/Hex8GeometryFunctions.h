@@ -504,7 +504,7 @@ void hex_areav_y(
 
   area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
   area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
-  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;l
+  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
 }
 
 template<typename Scalar>

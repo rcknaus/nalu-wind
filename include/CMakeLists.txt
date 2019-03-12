@@ -133,6 +133,7 @@ add_sources(GlobalHeaderList
    LinearSystem.h
    LowMachEquationSystem.h
    MassFractionEquationSystem.h
+   MatrixFreeElemSolver.h
    MaterialProperty.h
    MaterialPropertys.h
    MixtureFractionEquationSystem.h

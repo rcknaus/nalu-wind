@@ -119,6 +119,7 @@ add_sources(GlobalSourceList
    MassFractionEquationSystem.C
    MaterialProperty.C
    MaterialPropertys.C
+   MatrixFreeElemSolver.C
    MixtureFractionEquationSystem.C
    MomentumABLForceSrcNodeSuppAlg.C
    MomentumActuatorSrcNodeSuppAlg.C

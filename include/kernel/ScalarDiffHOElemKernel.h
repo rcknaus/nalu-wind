@@ -13,6 +13,8 @@
 #include <KokkosInterface.h>
 #include <AlgTraits.h>
 
+#include <MatrixFreeElemSolver.h>
+
 #include <master_element/TensorProductCVFEMOperators.h>
 #include <CVFEMTypeDefs.h>
 
@@ -31,6 +33,9 @@ class ScalarDiffHOElemKernel final : public Kernel
 {
   DeclareCVFEMTypeDefs(CVFEMViews<AlgTraits::polyOrder_>);
 public:
+  static constexpr int poly_order = AlgTraits::polyOrder_;
+  static constexpr int ndof = 1;
+
   ScalarDiffHOElemKernel(
     const stk::mesh::BulkData& bulkData,
     SolutionOptions& solnOpts,
@@ -40,7 +45,7 @@ public:
 
   ~ScalarDiffHOElemKernel() = default;
 
-  const ScalarFieldType& solution_field() { return *scalarQ_; }
+  ScalarFieldType& solution_field() { return *scalarQ_; }
 
   using Kernel::execute;
   void execute(
@@ -48,8 +53,7 @@ public:
     SharedMemView<DoubleType*>&,
     ScratchViewsHO<DoubleType>&) final;
 
-
-  void mfexecute(nodal_scalar_view& rhs, ScratchViewsHO<DoubleType>& scratchViews);
+  void executemf(nodal_scalar_view& rhs, ScratchViewsHOMF<poly_order>& scratchViews);
 
 
 private:
