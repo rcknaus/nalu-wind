@@ -37,6 +37,9 @@
 #include <Tpetra_MatrixIO.hpp>
 #include <MatrixMarket_Tpetra.hpp>
 
+#include <boost/functional/hash.hpp>
+
+
 #include <set>
 #include <limits>
 #include <type_traits>
@@ -48,6 +51,17 @@
 
 #define GLOBAL_ENTITY_ID(gid, ndof) ((gid-1)/ndof + 1)
 #define GLOBAL_ENTITY_ID_IDOF(gid, ndof) ((gid-1) % ndof)
+
+namespace std {
+template<>
+struct hash<stk::mesh::EntityVector>
+{
+    size_t operator()(const stk::mesh::EntityVector& entityVec) const {
+      return boost::hash_range(entityVec.begin(), entityVec.end());
+    }
+};
+}
+
 
 namespace {
 
@@ -115,7 +129,7 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
     activeBuckets,
     [&](stk::mesh::Entity e) {
       const SolutionPointStatus status = cat.status(e);
-      return (!is_skipped(status) && !is_owned(status) && is_shared(status));
+      return (!is_skipped(status) && (!is_owned(status) && is_shared(status)));
   });
 
   int64_t numNodes = 0;
@@ -141,14 +155,19 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
   return MeshIdData { maxOwnedRowId, maxSharedNotOwnedRowId, localIds, ownedGids, sharedNotOwnedGids };
 }
 
-std::vector<std::vector<stk::mesh::Entity>> element_to_node_map(const stk::mesh::BulkData& bulk, stk::mesh::Selector& selector)
+
+std::unordered_set<stk::mesh::EntityVector> element_to_node_map(const stk::mesh::BulkData& bulk, stk::mesh::Selector& selector)
 {
+  auto connections = std::unordered_set<stk::mesh::EntityVector>{};
   for (const auto* ib : bulk.get_buckets(stk::topology::ELEM_RANK, selector)) {
     for (auto e : *ib) {
       const auto* nodes  = bulk.begin_nodes(e);
+      for (unsigned n = 0; n < bulk.num_nodes(e); ++n) {
+
+      }
     }
   }
-
+  return connections;
 }
 
 }}
