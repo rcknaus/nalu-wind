@@ -209,7 +209,6 @@ private:
     return simdElems;
   }
 
-
   int num_scalars_pre_req_data_HO(int nodesPerEntity, const ElemDataRequests& elemDataNeeded)
   {
     int numScalars = 0;

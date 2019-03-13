@@ -23,7 +23,7 @@ template <int p>
 class ScratchViewsHOMF
 {
   DeclareCVFEMTypeDefs(CVFEMViews<p>);
-  static constexpr int maxViews = 25;
+  static constexpr int maxViews = 1000;
 public:
   using value_type = DoubleType;
 

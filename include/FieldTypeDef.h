@@ -42,6 +42,8 @@ typedef unsigned LocalId;
 typedef stk::mesh::Field<LocalId>  LocalIdFieldType;
 
 
+
+
 // Hypre Integer types
 #ifdef NALU_USES_HYPRE
 typedef HYPRE_Int HypreIntType;

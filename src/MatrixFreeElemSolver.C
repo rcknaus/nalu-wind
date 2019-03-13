@@ -11,8 +11,10 @@
 namespace sierra{
 namespace nalu{
 
-template class MatrixFreeElemSolver<1, ScalarDiffHOElemKernel<AlgTraitsHex<1>>>;
+#define INSTANTIATE_MFSOLVER(ClassName,PolyOrder) \
+  template class MatrixFreeElemSolver<PolyOrder,ClassName<PolyOrder>>; \
 
+INSTANTIATE_MFSOLVER(ScalarConductionHOElemKernel, 1)
 
 } // namespace nalu
 } // namespace Sierra

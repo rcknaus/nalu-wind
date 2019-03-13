@@ -70,6 +70,39 @@ private:
 };
 
 
+template <int p>
+class ScalarConductionHOElemKernel
+{
+  DeclareCVFEMTypeDefs(CVFEMViews<p>);
+public:
+  static constexpr int ndof = 1;
+
+  ScalarConductionHOElemKernel(
+    const stk::mesh::BulkData& bulkData,
+    SolutionOptions& solnOpts,
+    ScalarFieldType&  scalarQ,
+    ScalarFieldType&  diffFluxCoeff,
+    ElemDataRequests& dataPreReqs);
+
+  ~ScalarConductionHOElemKernel() = default;
+
+  ScalarFieldType& solution_field() { return *q_[stk::mesh::StateNP1]; }
+  void setup(const TimeIntegrator& ti);
+  void executemf(nodal_scalar_view& rhs, ScratchViewsHOMF<p>& scratchViews);
+
+
+private:
+  Kokkos::Array<ScalarFieldType*, 3> q_{{}};
+  Kokkos::Array<ScalarFieldType*, 3> rho_{{}};
+  Kokkos::Array<DoubleType, 3> gamma_{{}};
+
+  ScalarFieldType* diffusivity_{nullptr};
+  VectorFieldType* coordinates_{nullptr};
+  CVFEMOperators<p> ops_{};
+
+};
+
+
 
 } // namespace nalu
 } // namespace Sierra
