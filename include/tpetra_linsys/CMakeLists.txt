@@ -1,6 +1,6 @@
 add_sources(GlobalHeaderList
    EnumClassBitmask.h
-   TpetraGraphManager.h
+   SolutionPointCategorizer.h
    TpetraMeshManager.h
 )
 

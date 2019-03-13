@@ -57,9 +57,8 @@ promote_elements(
   stk::mesh::Part* facePart)
 {
   // only quads and hexs implemented
-
+  ThrowRequire(edgePart != nullptr);
   if (desc.dimension == 2) {
-    ThrowRequire(edgePart != nullptr);
     return internal::promote_elements_quad(bulk, desc, coordField, partsToBePromoted, *edgePart);
   }
   ThrowRequire(facePart != nullptr);
@@ -303,7 +302,7 @@ create_boundary_elements(
   stk::mesh::PartVector superSideParts;
 
   size_t faceIdIndex = 0;
-
+///
   bulk.modification_begin();
   for (const auto* ipart : parts) {
     for (const auto* subset : ipart->subsets()) {

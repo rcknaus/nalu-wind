@@ -425,7 +425,7 @@ MixtureFractionEquationSystem::register_interior_algorithm(
     kb.build_topo_kernel_if_requested<ScalarNSOElemKernel>
         ("NSO_2ND_ALT",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, evisc_, 0.0, 1.0, dataPreReqs);
-      
+
     kb.build_topo_kernel_if_requested<ScalarNSOElemKernel>
         ("NSO_4TH",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, evisc_, 1.0, 0.0, dataPreReqs);

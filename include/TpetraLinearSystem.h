@@ -46,7 +46,7 @@ typedef std::pair<stk::mesh::Entity, stk::mesh::Entity> Connection;
 typedef typename LinSys::Vector::dual_view_type dual_view_type;
 typedef typename dual_view_type::t_host host_view_type;
 
-  enum DOFStatus {
+  enum SolutionPointStatus {
     DS_NotSet           = 0,
     DS_SkippedDOF       = 1 << 1,
     DS_OwnedDOF         = 1 << 2,

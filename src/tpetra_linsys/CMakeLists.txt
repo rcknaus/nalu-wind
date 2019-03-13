@@ -1,5 +1,5 @@
 add_sources(GlobalSourceList
-   TpetraBlockLinearSystem.C
+   SolutionPointCategorizer.C
    TpetraMeshManager.C
 )
 
