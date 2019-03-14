@@ -52,8 +52,7 @@ bool SolutionPointCategorizer::is_slave(stk::mesh::Entity node)
 
 SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity node)
 {
-  const bool isSlaveNode = is_slave(node);
-  if (!isSlaveNode) {
+  if (!is_slave(node)) {
     return regular_status(node);
   }
   else {
@@ -65,7 +64,7 @@ SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity 
   return SolutionPointStatus::skipped;
 }
 
-SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
+SolutionPointCategorizer::SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
 {
   const stk::mesh::Bucket& b = bulk_.bucket(solPoint);
   bool periodicSolPoint = false;
@@ -99,12 +98,11 @@ SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
 
 SolutionPointStatus SolutionPointCategorizer::status(stk::mesh::Entity e)
 {
-  auto nodeType = type(e);
-  ThrowAssertMsg(nodeType != (SolutionPointType::periodic_master | SolutionPointType::nonconformal) &&
-    nodeType != (SolutionPointType::periodic_slave | SolutionPointType::nonconformal),"Node id:"
+  ThrowAssertMsg(type(e) != (SolutionPointType::periodic_master | SolutionPointType::nonconformal) &&
+    type(e) != (SolutionPointType::periodic_slave | SolutionPointType::nonconformal),"Node id:"
     + std::to_string(bulk_.identifier(e)) + " is both periodic and nonconformal");
 
-  switch (nodeType) {
+  switch (type(e)) {
     case SolutionPointType::regular: {
       return regular_status(e);
     }

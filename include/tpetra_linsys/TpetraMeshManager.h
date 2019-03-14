@@ -32,6 +32,7 @@ struct MeshIdData {
   std::unordered_map<int64_t, int64_t> localIds_;
   std::vector<int64_t> ownedGids_;
   std::vector<int64_t> sharedNotOwnedGids_;
+  std::vector<stk::ParallelMachine> sharedPids_;
 };
 
 MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,

@@ -79,7 +79,7 @@ template <typename CatFunc>
 std::vector<int64_t> determine_entity_id_list(
   const sierra::nalu::GlobalIdFieldType& gidField,
   const stk::mesh::BucketVector& activeBuckets,
-  CatFunc cat) // cats are doing funcs now?!!?! 2019
+  CatFunc cat) // cats are doing funcs now?!!?!
 {
   size_t numEntities = 0;
   for_each_entity_where_do(activeBuckets, cat, [&numEntities](stk::mesh::Entity) { ++numEntities; });
@@ -88,7 +88,6 @@ std::vector<int64_t> determine_entity_id_list(
   for_each_entity_where_do(activeBuckets, cat, [&entityIdList, &gidField](stk::mesh::Entity e) {
     entityIdList.push_back(static_cast<stk::mesh::EntityId>(*stk::mesh::field_data(gidField, e)));
   });
-
   std::sort(entityIdList.begin(), entityIdList.end());
   return entityIdList;
 }
@@ -103,14 +102,14 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
   stk::mesh::PartVector periodicParts,
   stk::mesh::PartVector nonconformalParts)
 {
-  auto cat = SolutionPointCategorizer(bulk, gidField, periodicParts, nonconformalParts);
+  auto solutionCat = SolutionPointCategorizer(bulk, gidField, periodicParts, nonconformalParts);
 
   const auto& activeBuckets = bulk.get_buckets(stk::topology::NODE_RANK, activeSelector);
   std::vector<int64_t> ownedEntityIds = determine_entity_id_list(
     gidField,
     activeBuckets,
-    [&cat](stk::mesh::Entity e) {
-    const SolutionPointStatus status = cat.status(e);
+    [&solutionCat](stk::mesh::Entity e) {
+    const SolutionPointStatus status = solutionCat.status(e);
     return (!is_skipped(status) && is_owned(status));
   });
   const int64_t maxOwnedRowId = ownedEntityIds.size() * MeshIdData::ndof;
@@ -119,7 +118,7 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
   std::vector<int64_t> ownedGids(MeshIdData::ndof * ownedEntityIds.size());
   std::unordered_map<int64_t, int64_t> localIds;
   for (const auto id : ownedEntityIds) {
-    localIds[id] = bulk.identifier(bulk.get_entity(stk::topology::NODE_RANK, id));
+    localIds[id] = MeshIdData::ndof * bulk.identifier(bulk.get_entity(stk::topology::NODE_RANK, id));
     for (int d = 0; d < MeshIdData::ndof; ++d) {
       ownedGids.push_back(GID_(id, MeshIdData::ndof, d));
     }
@@ -129,16 +128,16 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
     gidField,
     activeBuckets,
     [&](stk::mesh::Entity e) {
-      const SolutionPointStatus status = cat.status(e);
+      const SolutionPointStatus status = solutionCat.status(e);
       return (!is_skipped(status) && (!is_owned(status) && is_shared(status)));
   });
 
   int64_t numNodes = 0;
   for_each_entity_where_do(
     activeBuckets,
-    [&cat](stk::mesh::Entity e)
+    [&solutionCat](stk::mesh::Entity e)
     {
-      const SolutionPointStatus status = cat.status(e);
+      const SolutionPointStatus status = solutionCat.status(e);
       return (!is_skipped(status) && !is_ghosted(status));
     },
     [&numNodes](stk::mesh::Entity) { ++numNodes; }
@@ -187,14 +186,15 @@ std::vector<int32_t> entity_offset_to_row_lid_map(
   const GlobalIdFieldType& gidField,
   const SolutionPointCategorizer& cat,
   const stk::mesh::Selector& selector,
-  const std::unordered_map<int64_t, int64_t>& localIdsMap)
+  const std::unordered_map<int64_t, int64_t>& localIdsMap,
+  const std::unordered_map<stk::mesh::Entity, int64_t>& entityToLIDMap)
 {
 
 
 
   const stk::mesh::BulkData& bulk = realm_.bulk_data();
   stk::mesh::Selector selector = bulk.mesh_meta_data().universal_part() & !(realm_.get_inactive_selector());
-  entityToLID_.assign(bulk.get_size_of_entity_index_space(), 2000000000);
+  entityToLIDMap.assign(bulk.get_size_of_entity_index_space(), 2000000000);
   const stk::mesh::BucketVector& nodeBuckets = realm_.get_buckets(stk::topology::NODE_RANK, selector);
   for(const stk::mesh::Bucket* bptr : nodeBuckets) {
     const stk::mesh::Bucket& b = *bptr;
@@ -202,8 +202,8 @@ std::vector<int32_t> entity_offset_to_row_lid_map(
     for(size_t i=0; i<b.size(); ++i) {
       stk::mesh::Entity node = b[i];
 
-      MyLIDMapType::const_iterator iter = myLIDs_.find(nodeIds[i]);
-      if (iter != myLIDs_.end()) {
+      auto iter = localIdsMap.find(nodeIds[i]);
+      if (iter != localIdsMap.end()) {
         entityToLID_[node.local_offset()] = iter->second;
         if (nodeIds[i] != bulk.identifier(node)) {
           stk::mesh::Entity master = get_entity_master(bulk, node, nodeIds[i]);
