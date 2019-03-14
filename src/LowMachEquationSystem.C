@@ -683,6 +683,11 @@ LowMachEquationSystem::solve_and_update()
     timeA = NaluEnv::self().nalu_time();
     continuityEqSys_->computeMdotAlgDriver_->execute();
 
+    // compute mdot
+    stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);
+    stk::mesh::field_copy(*continuityEqSys_->pressure_, *continuityEqSys_->provisionalPressure_);
+    stk::mesh::field_copy(*continuityEqSys_->dpdx_, *continuityEqSys_->provisionalDpdx_);
+
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerMisc_ += (timeB-timeA);
     isInit_ = false;
@@ -739,7 +744,6 @@ LowMachEquationSystem::solve_and_update()
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerAssemble_ += (timeB-timeA);
 
-    // compute mdot
     timeA = NaluEnv::self().nalu_time();
     continuityEqSys_->computeMdotAlgDriver_->execute();
     timeB = NaluEnv::self().nalu_time();
@@ -1049,6 +1053,10 @@ MomentumEquationSystem::register_nodal_fields(
   velocity_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "velocity", numStates));
   stk::mesh::put_field_on_mesh(*velocity_, *part, nDim, nullptr);
   realm_.augment_restart_variable_list("velocity");
+
+  provisionalVelocity_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_velocity"));
+  stk::mesh::put_field_on_mesh(*provisionalVelocity_, *part, nDim, nullptr);
+  realm_.augment_restart_variable_list("provisional_velocity");
 
   dudx_ =  &(meta_data.declare_field<GenericFieldType>(stk::topology::NODE_RANK, "dudx"));
   stk::mesh::put_field_on_mesh(*dudx_, *part, nDim*nDim, nullptr);
@@ -2745,8 +2753,15 @@ ContinuityEquationSystem::register_nodal_fields(
   stk::mesh::put_field_on_mesh(*pressure_, *part, nullptr);
   realm_.augment_restart_variable_list("pressure");
 
+  provisionalPressure_ =  &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "provisional_pressure"));
+  stk::mesh::put_field_on_mesh(*provisionalPressure_, *part, nullptr);
+  realm_.augment_restart_variable_list("provisional_pressure");
+
   dpdx_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx"));
   stk::mesh::put_field_on_mesh(*dpdx_, *part, nDim, nullptr);
+
+  provisionalDpdx_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_dpdx"));
+  stk::mesh::put_field_on_mesh(*provisionalDpdx_, *part, nDim, nullptr);
 
   // delta solution for linear solver; share delta with other split systems
   pTmp_ =  &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "pTmp"));

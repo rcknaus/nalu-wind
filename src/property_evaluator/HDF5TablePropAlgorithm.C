@@ -79,9 +79,15 @@ HDF5TablePropAlgorithm::~HDF5TablePropAlgorithm()
 void
 HDF5TablePropAlgorithm::execute()
 {
+  auto time = realm_.get_current_time();
+  auto ignition_dt_ = 1.0;
+  auto ignition_time_ = 1.0;
+  const double F = std::min(1.0, std::max(0.0, 1 - (time - ignition_time_)/ignition_dt_));
+
   // make sure that partVec_ is size one
   ThrowAssert( partVec_.size() == 1 );
 
+  auto mixFracIndex = 0;
   stk::mesh::Selector selector = stk::mesh::selectUnion(partVec_);
 
   stk::mesh::BucketVector const& node_buckets =
@@ -108,7 +114,22 @@ HDF5TablePropAlgorithm::execute()
         double *z = workIndVar_[l];
         workZ_[l] = z[k];
       }
-      prop[k] = table_->query( workZ_ );
+
+      auto zval = workZ_[mixFracIndex];
+      auto propReal = table_->query(workZ_);
+
+      workZ_[mixFracIndex] = 0;
+      auto propOx = table_->query(workZ_);
+
+      workZ_[mixFracIndex] = 1;
+      auto propFuel = table_->query(workZ_);
+
+      if ( table_->name() == "density") {
+        prop[k] = F/(zval/propFuel + (1-zval)/propOx) + (1-F)*propReal;
+      }
+      else {
+        prop[k] = F*(zval*propFuel + (1-zval)*propOx) + (1-F)*propReal;
+      }
     }
   }
 }

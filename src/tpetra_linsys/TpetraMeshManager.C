@@ -181,40 +181,40 @@ std::vector<int32_t> entity_offset_to_column_lid_map(
   return entityToColLID;
 }
 
-std::vector<int32_t> entity_offset_to_row_lid_map(
-  const stk::mesh::BulkData& bulk,
-  const GlobalIdFieldType& gidField,
-  const SolutionPointCategorizer& cat,
-  const stk::mesh::Selector& selector,
-  const std::unordered_map<int64_t, int64_t>& localIdsMap,
-  const std::unordered_map<stk::mesh::Entity, int64_t>& entityToLIDMap)
-{
-
-
-
-  const stk::mesh::BulkData& bulk = realm_.bulk_data();
-  stk::mesh::Selector selector = bulk.mesh_meta_data().universal_part() & !(realm_.get_inactive_selector());
-  entityToLIDMap.assign(bulk.get_size_of_entity_index_space(), 2000000000);
-  const stk::mesh::BucketVector& nodeBuckets = realm_.get_buckets(stk::topology::NODE_RANK, selector);
-  for(const stk::mesh::Bucket* bptr : nodeBuckets) {
-    const stk::mesh::Bucket& b = *bptr;
-    const stk::mesh::EntityId* nodeIds = stk::mesh::field_data(*realm_.naluGlobalId_, b);
-    for(size_t i=0; i<b.size(); ++i) {
-      stk::mesh::Entity node = b[i];
-
-      auto iter = localIdsMap.find(nodeIds[i]);
-      if (iter != localIdsMap.end()) {
-        entityToLID_[node.local_offset()] = iter->second;
-        if (nodeIds[i] != bulk.identifier(node)) {
-          stk::mesh::Entity master = get_entity_master(bulk, node, nodeIds[i]);
-          if (master != node) {
-            entityToLID_[master.local_offset()] = entityToLID_[node.local_offset()];
-          }
-        }
-      }
-    }
-  }
-}
+//std::vector<int32_t> entity_offset_to_row_lid_map(
+//  const stk::mesh::BulkData& bulk,
+//  const GlobalIdFieldType& gidField,
+//  const SolutionPointCategorizer& cat,
+//  const stk::mesh::Selector& selector,
+//  const std::unordered_map<int64_t, int64_t>& localIdsMap,
+//  const std::unordered_map<stk::mesh::Entity, int64_t>& entityToLIDMap)
+//{
+//
+//
+//
+//  const stk::mesh::BulkData& bulk = realm_.bulk_data();
+//  stk::mesh::Selector selector = bulk.mesh_meta_data().universal_part() & !(realm_.get_inactive_selector());
+//  entityToLIDMap.assign(bulk.get_size_of_entity_index_space(), 2000000000);
+//  const stk::mesh::BucketVector& nodeBuckets = realm_.get_buckets(stk::topology::NODE_RANK, selector);
+//  for(const stk::mesh::Bucket* bptr : nodeBuckets) {
+//    const stk::mesh::Bucket& b = *bptr;
+//    const stk::mesh::EntityId* nodeIds = stk::mesh::field_data(*realm_.naluGlobalId_, b);
+//    for(size_t i=0; i<b.size(); ++i) {
+//      stk::mesh::Entity node = b[i];
+//
+//      auto iter = localIdsMap.find(nodeIds[i]);
+//      if (iter != localIdsMap.end()) {
+//        entityToLID_[node.local_offset()] = iter->second;
+//        if (nodeIds[i] != bulk.identifier(node)) {
+//          stk::mesh::Entity master = get_entity_master(bulk, node, nodeIds[i]);
+//          if (master != node) {
+//            entityToLID_[master.local_offset()] = entityToLID_[node.local_offset()];
+//          }
+//        }
+//      }
+//    }
+//  }
+//}
 
 std::unordered_set<stk::mesh::EntityVector> element_to_node_map(const stk::mesh::BulkData& bulk, stk::mesh::Selector& selector)
 {

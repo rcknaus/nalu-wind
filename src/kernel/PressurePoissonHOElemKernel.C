@@ -88,6 +88,8 @@ PressurePoissonHOElemKernel<AlgTraits>::execute(
   high_order_metrics::compute_mdot_linear(ops_, coords, metric, projTimeScale_, rho, vel, Gp, pressure, mdot);
 
   nodal_scalar_view v_rhs(rhs.data());
+//  high_order_metrics::scale_metric(ops_,density_, metric);
+
   tensor_assembly::pressure_poisson_rhs(ops_, projTimeScale_, l_mdot.view(), v_rhs);
 
   matrix_view v_lhs(lhs.data());

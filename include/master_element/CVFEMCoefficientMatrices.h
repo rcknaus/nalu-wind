@@ -33,7 +33,7 @@ struct CoefficientMatrices
   CoefficientMatrices()
   : scsDeriv(coefficients::scs_derivative_weights<p, Scalar>()),
     scsInterp(coefficients::scs_interpolation_weights<p, Scalar>()),
-    nodalWeights(coefficients::nodal_integration_weights<p, Scalar>()),
+    nodalWeights(p==1 ? coefficients::identity_matrix<p, Scalar>() : coefficients::nodal_integration_weights<p, Scalar>()),
     nodalDeriv(coefficients::nodal_derivative_weights<p, Scalar>()),
     difference(coefficients::difference_matrix<p, Scalar>()),
     linearNodalInterp(coefficients::linear_nodal_interpolation_weights<p, Scalar>()),

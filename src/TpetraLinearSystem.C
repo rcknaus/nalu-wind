@@ -852,7 +852,7 @@ TpetraLinearSystem::compute_graph_row_lengths(const std::vector<stk::mesh::Entit
         colOwners[j] = bulk.parallel_owner_rank(get_entity_master(bulk, colEntity, colEntityIds[j]));
     }
 
-    const stk::mesh::EntityIsd entityId_a = *stk::mesh::field_data(*realm_.naluGlobalId_, entity_a);
+    const stk::mesh::EntityId entityId_a = *stk::mesh::field_data(*realm_.naluGlobalId_, entity_a);
 
     const int entity_a_status = getDofStatus(entity_a);
     const bool entity_a_owned = entity_a_status & DS_OwnedDOF;

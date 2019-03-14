@@ -201,6 +201,8 @@ public:
   const bool managePNG_;
 
   VectorFieldType *velocity_;
+  VectorFieldType *provisionalVelocity_;
+
   GenericFieldType *dudx_;
 
   VectorFieldType *coordinates_;
@@ -295,7 +297,9 @@ public:
   const bool elementContinuityEqs_;
   const bool managePNG_;
   ScalarFieldType *pressure_;
+  ScalarFieldType *provisionalPressure_;
   VectorFieldType *dpdx_;
+  VectorFieldType *provisionalDpdx_;
   ScalarFieldType *massFlowRate_;
   VectorFieldType *coordinates_;
 

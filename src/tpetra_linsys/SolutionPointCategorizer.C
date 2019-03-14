@@ -64,7 +64,7 @@ SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity 
   return SolutionPointStatus::skipped;
 }
 
-SolutionPointCategorizer::SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
+SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
 {
   const stk::mesh::Bucket& b = bulk_.bucket(solPoint);
   bool periodicSolPoint = false;

@@ -56,17 +56,21 @@ MomentumAdvDiffHOElemKernel<AlgTraits>::MomentumAdvDiffHOElemKernel(
   viscosity_ = &viscosity->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*viscosity_, 1);
 
-  Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx")
-      ->field_of_state(stk::mesh::StateNone);
-  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
-
-  pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure")
-      ->field_of_state(stk::mesh::StateNone);
-  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
-
   density_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density")
       ->field_of_state(stk::mesh::StateNP1);
   dataPreReqs.add_gathered_nodal_field(*density_, 1);
+
+  Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_dpdx")
+      ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
+
+  pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "provisional_pressure")
+      ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
+
+  provisionalVelocity_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_velocity")
+      ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*provisionalVelocity_, AlgTraits::nDim_);
 
   velocity_ = &velocity->field_of_state(stk::mesh::StateNP1);
   dataPreReqs.add_gathered_nodal_field(*velocity_, AlgTraits::nDim_);
@@ -90,8 +94,9 @@ MomentumAdvDiffHOElemKernel<AlgTraits>::execute(
   scs_scalar_workview work_mdot;
   auto& mdot = work_mdot.view();
   {
-    // FIXME: no ability to save off the new mdot in kernel ATM.  So we just recompute it
     auto pressure = scratchViews.get_scratch_view<nodal_scalar_view>(*pressure_);
+    auto pvel = scratchViews.get_scratch_view<nodal_vector_view>(*provisionalVelocity_);
+
     auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
     auto Gp = scratchViews.get_scratch_view<nodal_vector_view>(*Gp_);
     high_order_metrics::compute_mdot_linear(ops_, coords, laplacian_metric, projTimeScale_,  rho, vel, Gp, pressure, mdot);
