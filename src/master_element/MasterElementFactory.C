@@ -164,7 +164,7 @@ namespace nalu{
         LagrangeBasis(desc->inverseNodeMap, desc->nodeLocs1D)
       : LagrangeBasis(desc->inverseNodeMapBC, desc->nodeLocs1D);
 
-    auto quad = TensorProductQuadratureRule(quadType, desc->polyOrder);
+    auto quad = TensorProductQuadratureRule(quadType, desc->polyOrder+1);
 
     if (topo.is_superedge()) {
       ThrowRequire(desc->baseTopo == stk::topology::QUAD_4_2D);

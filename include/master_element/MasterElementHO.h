@@ -177,7 +177,15 @@ public:
     SharedMemView<DoubleType**>& coords,
     SharedMemView<DoubleType***>& gradop) final;
 
+
+  const int * scsIpEdgeOrd() { return scsIpEdgeOrd_; }
+
+
 private:
+
+  // elem-edge mapping from ip
+  const int  scsIpEdgeOrd_  [12]={0,1,2,3,4,5,6,7,8,9,10,11};
+
   void set_interior_info();
   void set_boundary_info();
 

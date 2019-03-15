@@ -3197,6 +3197,19 @@ Realm::overset_orphan_node_field_update(
   oversetManager_->overset_orphan_node_field_update(theField, sizeRow, sizeCol);
 }
 
+bool Realm::is_output_step()
+{
+  const double elapsedWallTime = stk::wall_time() - wallTimeStart_;
+  double g_elapsedWallTime = 0.0;
+  stk::all_reduce_max(NaluEnv::self().parallel_comm(), &elapsedWallTime, &g_elapsedWallTime, 1);
+  g_elapsedWallTime /= 3600.0;
+
+  bool forcedOutput =  g_elapsedWallTime > outputInfo_->userWallTimeResults_.second ;
+  const int timeStepCount = get_time_step_count();
+  const int modStep = timeStepCount - outputInfo_->outputStart_;
+  return (timeStepCount >=outputInfo_->outputStart_ && modStep % outputInfo_->outputFreq_ == 0) || forcedOutput;
+}
+
 //--------------------------------------------------------------------------
 //-------- provide_output --------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3266,6 +3279,8 @@ Realm::provide_output()
     timerOutputFields_ += (stop_time - start_time);
   }
 }
+
+
 
 //--------------------------------------------------------------------------
 //-------- provide_restart_output ------------------------------------------

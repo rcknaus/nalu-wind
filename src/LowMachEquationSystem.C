@@ -680,16 +680,30 @@ LowMachEquationSystem::solve_and_update()
   double timeA, timeB;
   if ( isInit_ ) {
     continuityEqSys_->compute_projected_nodal_gradient();
+
+    continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
+
     timeA = NaluEnv::self().nalu_time();
-    continuityEqSys_->computeMdotAlgDriver_->execute();
+    field_axpby(
+      realm_.meta_data(),
+      realm_.bulk_data(),
+      1.0, *continuityEqSys_->pTmp_,
+      1.0, *continuityEqSys_->pressure_,
+      realm_.get_activate_aura());
+    timeB = NaluEnv::self().nalu_time();
+    continuityEqSys_->timerAssemble_ += (timeB-timeA);
 
     // compute mdot
+    timeA = NaluEnv::self().nalu_time();
+    continuityEqSys_->computeMdotAlgDriver_->execute();
     stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);
     stk::mesh::field_copy(*continuityEqSys_->pressure_, *continuityEqSys_->provisionalPressure_);
     stk::mesh::field_copy(*continuityEqSys_->dpdx_, *continuityEqSys_->provisionalDpdx_);
-
+    project_nodal_velocity();
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerMisc_ += (timeB-timeA);
+
+
     isInit_ = false;
   }
 
@@ -748,6 +762,10 @@ LowMachEquationSystem::solve_and_update()
     continuityEqSys_->computeMdotAlgDriver_->execute();
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerMisc_ += (timeB-timeA);
+
+    stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);
+    stk::mesh::field_copy(*continuityEqSys_->pressure_, *continuityEqSys_->provisionalPressure_);
+    stk::mesh::field_copy(*continuityEqSys_->dpdx_, *continuityEqSys_->provisionalDpdx_);
 
     // project nodal velocity
     project_nodal_velocity();
