@@ -51,7 +51,7 @@ public:
   double funvw(double y)
   {
     const double ymod = (do_wrap) ? wrap_value(y + M_PI, 2 * M_PI) : (y + M_PI);
-    const auto gaussScale = inv_initial_vorticity_thickness * inv_initial_vorticity_thickness;
+    const auto gaussScale = inv_perturbation_thickness * inv_perturbation_thickness;
     return perturb_mag * std::exp(-gaussScale * (ymod-M_PI)*(ymod-M_PI));
   }
 
@@ -59,12 +59,11 @@ public:
   const double size_ratio_y{16/3.0 * M_PI};
   const double size_ratio_z{16/3.0 * M_PI};
   const double perturb_mag{0.1};
-  const double inv_initial_vorticity_thickness{50/size_ratio_x};
+  const double inv_perturbation_thickness{15/size_ratio_y};
+  const double inv_initial_vorticity_thickness{30/size_ratio_y};
   const bool do_wrap{false};
 };
-
 }
-
 
 void
 PerturbedShearLayerVelocityAuxFunction::do_evaluate(
