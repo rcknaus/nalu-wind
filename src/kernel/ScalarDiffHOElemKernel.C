@@ -77,24 +77,7 @@ ScalarDiffHOElemKernel<AlgTraits>::execute(
   auto end_time_resid = std::chrono::steady_clock::now();
   timer_resid += std::chrono::duration_cast<std::chrono::duration<double>>(end_time_resid - start_time_resid).count();
 }
-
-// add mass
-template <typename AlgTraits> void
-ScalarDiffHOElemKernel<AlgTraits>::executemf(nodal_scalar_view& rhs, ScratchViewsHOMF<poly_order>& scratchViews)
-{
-  nodal_vector_view v_coords = scratchViews.get_scratch_view(*coordinates_);
-  nodal_scalar_view v_diff = scratchViews.get_scratch_view(*diffFluxCoeff_);
-
-  scs_vector_workview work_metric(0);
-  auto& metric = work_metric.view();
-  high_order_metrics::compute_diffusion_metric_linear(ops_, v_coords, v_diff, metric);
-
-  nodal_scalar_view scalar = scratchViews.get_scratch_view(*scalarQ_);
-  tensor_assembly::scalar_diffusion_rhs(ops_, metric, scalar, rhs);
-}
-
 INSTANTIATE_KERNEL_HOSGL(ScalarDiffHOElemKernel)
-
 
 template <int p>
 ScalarConductionHOElemKernel<p>::ScalarConductionHOElemKernel(
@@ -135,7 +118,6 @@ ScalarConductionHOElemKernel<p>::executemf(nodal_scalar_view& rhs, ScratchViewsH
 {
   nodal_vector_view coords = scratchViews.get_scratch_view(*coordinates_);
   nodal_scalar_view phip1 = scratchViews.get_scratch_view(*q_[stk::mesh::StateNP1]);
-
   {
     nodal_scalar_view diff = scratchViews.get_scratch_view(*diffusivity_);
     scs_vector_workview work_metric(0); auto& metric = work_metric.view();

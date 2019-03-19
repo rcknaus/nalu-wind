@@ -53,8 +53,6 @@ public:
     SharedMemView<DoubleType*>&,
     ScratchViewsHO<DoubleType>&) final;
 
-  void executemf(nodal_scalar_view& rhs, ScratchViewsHOMF<poly_order>& scratchViews);
-
 
 private:
   ScalarFieldType *scalarQ_{nullptr};
