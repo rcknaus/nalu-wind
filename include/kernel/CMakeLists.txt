@@ -28,6 +28,7 @@ add_sources(GlobalHeaderList
    ScalarDiffHOElemKernel.h
    ScalarDiffFemKernel.h
    ScalarFluxPenaltyElemKernel.h
+   ScalarInflowElemKernel.h
    ScalarMassElemKernel.h
    ScalarMassHOElemKernel.h
    ScalarOpenAdvElemKernel.h

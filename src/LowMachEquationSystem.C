@@ -909,9 +909,7 @@ LowMachEquationSystem::project_nodal_velocity()
   //==========================================================
   
   // selector and node_buckets (only projected nodes)
-  stk::mesh::Selector s_projected_nodes
-    = (!stk::mesh::selectUnion(momentumEqSys_->notProjectedPart_)) &
-    stk::mesh::selectField(*dpdx);
+  stk::mesh::Selector s_projected_nodes = stk::mesh::selectField(*dpdx);
   stk::mesh::BucketVector const& p_node_buckets =
     realm_.get_buckets( stk::topology::NODE_RANK, s_projected_nodes );
   

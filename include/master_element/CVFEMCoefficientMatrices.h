@@ -33,13 +33,15 @@ struct CoefficientMatrices
   CoefficientMatrices()
   : scsDeriv(coefficients::scs_derivative_weights<p, Scalar>()),
     scsInterp(coefficients::scs_interpolation_weights<p, Scalar>()),
-    nodalWeights(p==1 ? coefficients::identity_matrix<p, Scalar>() : coefficients::nodal_integration_weights<p, Scalar>()),
+    nodalWeights(coefficients::nodal_integration_weights<p, Scalar>()),
     nodalDeriv(coefficients::nodal_derivative_weights<p, Scalar>()),
     difference(coefficients::difference_matrix<p, Scalar>()),
     linearNodalInterp(coefficients::linear_nodal_interpolation_weights<p, Scalar>()),
     linearScsInterp(coefficients::linear_scs_interpolation_weights<p, Scalar>()),
     lumpedNodalWeights(coefficients::lumped_nodal_integration_weights<p,Scalar>())
   {};
+//    nodalWeights(p==1 ? coefficients::identity_matrix<p, Scalar>() : coefficients::nodal_integration_weights<p, Scalar>()),
+//  nodalWeights(coefficients::nodal_integration_weights<p, Scalar>()),
 
   const scs_matrix_view<p, Scalar> scsDeriv;
   const scs_matrix_view<p, Scalar> scsInterp;

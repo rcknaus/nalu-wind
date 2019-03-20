@@ -7,12 +7,8 @@
 #include <set>
 #include <string>
 #include <map>
-#include <memory>
-
 
 #include <tabular_props/HDF5Table.h>
-#include <FieldTypeDef.h>
-
 
 namespace stk {
 namespace mesh {
@@ -41,9 +37,6 @@ class H5IO;
  *  turbulence/chemistry interaction model being used.  The internal
  *  structure does not matter to the calling routine.
  */
-
-class HigherOrderHexSCV;
-
 class HDF5TablePropAlgorithm : public Algorithm
 {
   
@@ -64,12 +57,12 @@ public:
 
   virtual ~HDF5TablePropAlgorithm();
 
-  ScalarFieldType *prop_;
+  stk::mesh::FieldBase *prop_;
   std::string tablePropName_;
   std::vector<std::string> indVarTableNameVec_;
   const size_t indVarSize_;
 
-  std::vector<ScalarFieldType*> indVar_;
+  std::vector<stk::mesh::FieldBase *> indVar_;
   std::vector<double *> workIndVar_;
   std::vector<double> workZ_;
 
@@ -96,8 +89,6 @@ public:
 
   // Names of the inputs required by the query() function
   std::vector<std::string> inputNames_;
-
-  std::unique_ptr<HigherOrderHexSCV> meSCVPtr;
 
 };
 

@@ -60,6 +60,7 @@
 
 // bc kernels
 #include <kernel/ScalarOpenAdvElemKernel.h>
+#include <kernel/ScalarInflowElemKernel.h>
 
 // deprecated
 #include <ScalarMassElemSuppAlgDep.h>
@@ -556,18 +557,35 @@ MixtureFractionEquationSystem::register_inflow_bc(
     }
   }
 
-  // Dirichlet bc
-  std::map<AlgorithmType, SolverAlgorithm *>::iterator itd =
-    solverAlgDriver_->solverDirichAlgMap_.find(algType);
-  if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
-    DirichletBC *theAlg
-      = new DirichletBC(realm_, this, part, &mixFracNp1, theBcField, 0, 1);
-    solverAlgDriver_->solverDirichAlgMap_[algType] = theAlg;
+  // solver; lhs
+  if ( realm_.solutionOptions_->useConsolidatedBcSolverAlg_ ) {
+    auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
+    stk::topology elemTopo = get_elem_topo(realm_, *part);
+    AssembleFaceElemSolverAlgorithm* faceElemSolverAlg = nullptr;
+    bool solverAlgWasBuilt = false;
+
+    std::tie(faceElemSolverAlg, solverAlgWasBuilt)
+      = build_or_add_part_to_face_elem_solver_alg(algType, *this, *part, elemTopo, solverAlgMap, "inflow");
+
+    auto& activeKernels = faceElemSolverAlg->activeKernels_;
+
+    if (solverAlgWasBuilt) {
+      build_face_elem_topo_kernel_automatic<ScalarInflowElemKernel>
+        (part->topology(), elemTopo, *this, activeKernels, "mixture_fraction_inflow",
+         realm_.bulk_data(), *realm_.solutionOptions_, mixFracNp1, *theBcField, *evisc_,
+         faceElemSolverAlg->faceDataNeeded_, faceElemSolverAlg->elemDataNeeded_);
+    }
   }
   else {
-    itd->second->partVec_.push_back(part);
+    auto itd = solverAlgDriver_->solverDirichAlgMap_.find(algType);
+    if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
+      solverAlgDriver_->solverDirichAlgMap_[algType] =
+          new DirichletBC(realm_, this, part, &mixFracNp1, theBcField, 0, 1);
+    }
+    else {
+      itd->second->partVec_.push_back(part);
+    }
   }
-
 }
 
 //--------------------------------------------------------------------------

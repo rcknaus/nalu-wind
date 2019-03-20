@@ -57,6 +57,10 @@ ScalarAdvDiffHOElemKernel<AlgTraits>::ScalarAdvDiffHOElemKernel(
   diffFluxCoeff_ = &diffFluxCoeff->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*diffFluxCoeff_, 1);
 
+  density_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density")
+      ->field_of_state(stk::mesh::StateNP1);
+  dataPreReqs.add_gathered_nodal_field(*density_, 1);
+
   Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_dpdx")
       ->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
@@ -64,10 +68,6 @@ ScalarAdvDiffHOElemKernel<AlgTraits>::ScalarAdvDiffHOElemKernel(
   pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "provisional_pressure")
       ->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
-
-  density_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density")
-      ->field_of_state(stk::mesh::StateNP1);
-  dataPreReqs.add_gathered_nodal_field(*density_, 1);
 
   velocity_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_velocity")
       ->field_of_state(stk::mesh::StateNone);
