@@ -70,7 +70,7 @@ ScalarMassHOElemKernel<AlgTraits>::ScalarMassHOElemKernel(
   densityNp1_ = &(density->field_of_state(stk::mesh::StateNP1));
   dataPreReqs.add_gathered_nodal_field(*densityNp1_, 1);
 
-  densityNm1_ = (scalarQ->number_of_states() == 2) ? densityN_ : &(density->field_of_state(stk::mesh::StateNM1));
+  densityNm1_ = (density->number_of_states() == 2) ? densityN_ : &(density->field_of_state(stk::mesh::StateNM1));
   dataPreReqs.add_gathered_nodal_field(*densityNm1_, 1);
 }
 //--------------------------------------------------------------------------

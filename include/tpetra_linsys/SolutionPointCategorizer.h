@@ -37,54 +37,6 @@ enum class SolutionPointStatus
 };
 ENABLE_BITMASK_OPERATORS(SolutionPointStatus)
 
-enum class SolutionPointType {
-  regular = 1 << 0,
-  periodic_master = 1 << 1,
-  periodic_slave = 1 << 2,
-  nonconformal = 1 << 3
-};
-ENABLE_BITMASK_OPERATORS(SolutionPointType)
-
-
-class SolutionPointCategorizer
-{
-public:
-  SolutionPointCategorizer(
-    stk::mesh::BulkData& bulk,
-    GlobalIdFieldType& gidField,
-    stk::mesh::PartVector periodicParts,
-    stk::mesh::PartVector nonconformalParts)
-  : bulk_(bulk),
-    globalIdField_(gidField),
-    periodicSelector_(stk::mesh::selectUnion(periodicParts)),
-    nonconformalSelector_(stk::mesh::selectUnion(nonconformalParts))
-  {}
-
-  SolutionPointStatus status(stk::mesh::Entity e);
-  SolutionPointType type(stk::mesh::Entity e);
-private:
-
-
-  stk::mesh::EntityId nalu_mesh_global_id(stk::mesh::Entity e) {
-    return static_cast<stk::mesh::EntityId>(*stk::mesh::field_data(globalIdField_, e));
-  }
-
-  stk::mesh::EntityId stk_mesh_global_id(stk::mesh::Entity e) {
-    return bulk_.identifier(e);
-  }
-
-  SolutionPointStatus regular_status(stk::mesh::Entity e);
-  SolutionPointStatus special_status(stk::mesh::Entity e);
-  SolutionPointStatus periodic_status(stk::mesh::Entity e);
-  SolutionPointStatus nonconformal_status(stk::mesh::Entity e);
-  bool is_slave(stk::mesh::Entity e);
-
-  stk::mesh::BulkData& bulk_;
-  GlobalIdFieldType& globalIdField_;
-  stk::mesh::Selector periodicSelector_;
-  stk::mesh::Selector nonconformalSelector_;
-};
-
 inline bool is_skipped(SolutionPointStatus status)
 {
   return static_cast<bool>(status & SolutionPointStatus::skipped);
@@ -102,6 +54,67 @@ inline bool is_ghosted(SolutionPointStatus status)
 {
   return static_cast<bool>(status & SolutionPointStatus::ghosted);
 }
+
+enum class SolutionPointType {
+  regular = 1 << 0,
+  periodic_master = 1 << 1,
+  periodic_slave = 1 << 2,
+  nonconformal = 1 << 3
+};
+ENABLE_BITMASK_OPERATORS(SolutionPointType)
+
+inline bool is_regular(SolutionPointType type) {
+  return static_cast<bool>(type & SolutionPointType::regular);
+}
+
+inline bool is_master(SolutionPointType type) {
+  return static_cast<bool>(type & SolutionPointType::periodic_master);
+}
+
+inline bool is_slave(SolutionPointType type) {
+  return static_cast<bool>(type & SolutionPointType::periodic_slave);
+}
+
+inline bool is_nonconformal(SolutionPointType type) {
+  return static_cast<bool>(type & SolutionPointType::nonconformal);
+}
+
+class SolutionPointCategorizer
+{
+public:
+  SolutionPointCategorizer(
+    stk::mesh::BulkData& bulk,
+    GlobalIdFieldType& gidField,
+    stk::mesh::PartVector periodicParts,
+    stk::mesh::PartVector nonconformalParts)
+  : bulk_(bulk),
+    globalIdField_(gidField),
+    periodicSelector_(stk::mesh::selectUnion(periodicParts)),
+    nonconformalSelector_(stk::mesh::selectUnion(nonconformalParts))
+  {}
+
+  SolutionPointStatus status(stk::mesh::Entity e) const;
+  SolutionPointType type(stk::mesh::Entity e) const;
+private:
+  stk::mesh::EntityId nalu_mesh_global_id(stk::mesh::Entity e)  const {
+    return static_cast<stk::mesh::EntityId>(*stk::mesh::field_data(globalIdField_, e));
+  }
+
+  stk::mesh::EntityId stk_mesh_global_id(stk::mesh::Entity e)  const {
+    return bulk_.identifier(e);
+  }
+
+  SolutionPointStatus regular_status(stk::mesh::Entity e) const;
+  SolutionPointStatus special_status(stk::mesh::Entity e) const;
+  SolutionPointStatus periodic_status(stk::mesh::Entity e) const;
+  SolutionPointStatus nonconformal_status(stk::mesh::Entity e) const;
+  bool is_slave(stk::mesh::Entity e) const;
+
+  stk::mesh::BulkData& bulk_;
+  GlobalIdFieldType& globalIdField_;
+  stk::mesh::Selector periodicSelector_;
+  stk::mesh::Selector nonconformalSelector_;
+};
 
 }
 }

@@ -18,7 +18,7 @@ namespace nalu {
 
 // this stuff probably should be handled through part membership relations
 
-SolutionPointStatus SolutionPointCategorizer::regular_status(stk::mesh::Entity node)
+SolutionPointStatus SolutionPointCategorizer::regular_status(stk::mesh::Entity node) const
 {
   const stk::mesh::Bucket& b = bulk_.bucket(node);
   const bool entityIsOwned = b.owned();
@@ -39,18 +39,18 @@ SolutionPointStatus SolutionPointCategorizer::regular_status(stk::mesh::Entity n
   return SolutionPointStatus::skipped;
 }
 
-SolutionPointStatus SolutionPointCategorizer::nonconformal_status(stk::mesh::Entity node)
+SolutionPointStatus SolutionPointCategorizer::nonconformal_status(stk::mesh::Entity node) const
 {
   return regular_status(node) | SolutionPointStatus::nonconformal;
 }
 
-bool SolutionPointCategorizer::is_slave(stk::mesh::Entity node)
+bool SolutionPointCategorizer::is_slave(stk::mesh::Entity node) const
 {
   // this rule could potentially be invalidated in the future
   return (stk_mesh_global_id(node) != nalu_mesh_global_id(node));
 }
 
-SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity node)
+SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity node) const
 {
   if (!is_slave(node)) {
     return regular_status(node);
@@ -64,7 +64,7 @@ SolutionPointStatus SolutionPointCategorizer::periodic_status(stk::mesh::Entity 
   return SolutionPointStatus::skipped;
 }
 
-SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
+SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint) const
 {
   const stk::mesh::Bucket& b = bulk_.bucket(solPoint);
   bool periodicSolPoint = false;
@@ -96,7 +96,7 @@ SolutionPointType SolutionPointCategorizer::type(stk::mesh::Entity solPoint)
   return SolutionPointType::regular;
 }
 
-SolutionPointStatus SolutionPointCategorizer::status(stk::mesh::Entity e)
+SolutionPointStatus SolutionPointCategorizer::status(stk::mesh::Entity e) const
 {
   ThrowAssertMsg(type(e) != (SolutionPointType::periodic_master | SolutionPointType::nonconformal) &&
     type(e) != (SolutionPointType::periodic_slave | SolutionPointType::nonconformal),"Node id:"

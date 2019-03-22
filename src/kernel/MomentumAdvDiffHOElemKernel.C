@@ -89,8 +89,6 @@ MomentumAdvDiffHOElemKernel<AlgTraits>::execute(
   auto& laplacian_metric = work_metric.view();
   high_order_metrics::compute_laplacian_metric_linear(ops_, coords, laplacian_metric);
 
-  auto vel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
-
   scs_scalar_workview work_mdot;
   auto& mdot = work_mdot.view();
   {
@@ -99,10 +97,11 @@ MomentumAdvDiffHOElemKernel<AlgTraits>::execute(
 
     auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
     auto Gp = scratchViews.get_scratch_view<nodal_vector_view>(*Gp_);
-    high_order_metrics::compute_mdot_linear(ops_, coords, laplacian_metric, projTimeScale_,  rho, vel, Gp, pressure, mdot);
+    high_order_metrics::compute_mdot_linear(ops_, coords, laplacian_metric, projTimeScale_,  rho, pvel, Gp, pressure, mdot);
   }
 
   auto viscosity = scratchViews.get_scratch_view<nodal_scalar_view>(*viscosity_);
+  auto vel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
 
   scs_vector_workview work_tau_dot_a;
   auto& tau_dot_a = work_tau_dot_a.view();

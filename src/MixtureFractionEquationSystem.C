@@ -399,6 +399,7 @@ MixtureFractionEquationSystem::register_interior_algorithm(
     if ( realm_.realmUsesEdges_ )
       throw std::runtime_error("MixtureFraction::Error can not use element source terms for an edge-based scheme");
     
+    //realm_.using_tensor_product_kernels()
     KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
     auto& dataPreReqs = kb.data_prereqs();
     auto& dataPreReqsHO = kb.data_prereqs_HO();
@@ -444,11 +445,11 @@ MixtureFractionEquationSystem::register_interior_algorithm(
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, realm_.get_turb_schmidt(mixFrac_->name()), 1.0, dataPreReqs);
 
     kb.build_sgl_kernel_if_requested<ScalarMassHOElemKernel>
-        ("experimental_ho_mass",
+        ("mixture_fraction_time_derivative",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<ScalarAdvDiffHOElemKernel>
-        ("experimental_ho_advection_diffusion",
+        ("advection_diffusion",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, evisc_, dataPreReqsHO);
 
     kb.report();

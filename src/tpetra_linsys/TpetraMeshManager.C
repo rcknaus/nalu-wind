@@ -54,16 +54,21 @@
 
 namespace std {
 template<>
-struct hash<stk::mesh::EntityVector>
-{
-    size_t operator()(const stk::mesh::EntityVector& entityVec) const {
-      return boost::hash_range(entityVec.begin(), entityVec.end());
-    }
+struct hash<stk::mesh::EntityVector> {
+    size_t operator()(const stk::mesh::EntityVector& entityVec) const
+    { return boost::hash_range(entityVec.begin(), entityVec.end()); }
 };
+
 }
 
-
 namespace {
+
+  int64_t flattened_global_offset(int64_t gid, int ndof, int idof) { return ndof * (gid - 1) + idof + 1;  }
+//  int64_t flattened_local_offset(int64_t lid, int ndof, int idof) { return ndof * lid + idof + 1; }
+//  int64_t flattened_entity_offset(int64_t gid , int ndof) { return (gid-1)/ndof + 1; }
+//  int dimension_index(int64_t gid, int ndof) { return (gid - 1) % ndof; }
+
+
 
 template <typename BoolOp, typename ExecOp> void
 for_each_entity_where_do(const stk::mesh::BucketVector& buckets, BoolOp where, ExecOp exec)
@@ -79,20 +84,20 @@ template <typename CatFunc>
 std::vector<int64_t> determine_entity_id_list(
   const sierra::nalu::GlobalIdFieldType& gidField,
   const stk::mesh::BucketVector& activeBuckets,
-  CatFunc cat) // cats are doing funcs now?!!?!
+  CatFunc cat)
 {
   size_t numEntities = 0;
   for_each_entity_where_do(activeBuckets, cat, [&numEntities](stk::mesh::Entity) { ++numEntities; });
-
   std::vector<int64_t> entityIdList; entityIdList.reserve(numEntities);
   for_each_entity_where_do(activeBuckets, cat, [&entityIdList, &gidField](stk::mesh::Entity e) {
-    entityIdList.push_back(static_cast<stk::mesh::EntityId>(*stk::mesh::field_data(gidField, e)));
+    entityIdList.push_back(*stk::mesh::field_data(gidField, e));
   });
   std::sort(entityIdList.begin(), entityIdList.end());
   return entityIdList;
 }
-
 }
+constexpr int ndof = 1;
+
 
 namespace sierra {  namespace nalu {
 
@@ -102,6 +107,7 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
   stk::mesh::PartVector periodicParts,
   stk::mesh::PartVector nonconformalParts)
 {
+
   auto solutionCat = SolutionPointCategorizer(bulk, gidField, periodicParts, nonconformalParts);
 
   const auto& activeBuckets = bulk.get_buckets(stk::topology::NODE_RANK, activeSelector);
@@ -109,18 +115,19 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
     gidField,
     activeBuckets,
     [&solutionCat](stk::mesh::Entity e) {
-    const SolutionPointStatus status = solutionCat.status(e);
-    return (!is_skipped(status) && is_owned(status));
+      const SolutionPointStatus status = solutionCat.status(e);
+      return !is_skipped(status) && is_owned(status);
   });
-  const int64_t maxOwnedRowId = ownedEntityIds.size() * MeshIdData::ndof;
+  const int64_t maxOwnedRowId = ownedEntityIds.size() * ndof;
 
   int32_t localId = 0;
-  std::vector<int64_t> ownedGids(MeshIdData::ndof * ownedEntityIds.size());
+  std::vector<int64_t> ownedGids(ndof * ownedEntityIds.size());
   std::unordered_map<int64_t, int64_t> localIds;
-  for (const auto id : ownedEntityIds) {
-    localIds[id] = MeshIdData::ndof * bulk.identifier(bulk.get_entity(stk::topology::NODE_RANK, id));
-    for (int d = 0; d < MeshIdData::ndof; ++d) {
-      ownedGids.push_back(GID_(id, MeshIdData::ndof, d));
+  for (unsigned k = 0; k < ownedEntityIds.size(); ++k) {
+    const auto id = ownedEntityIds[k];
+    localIds[id] = ndof * bulk.identifier(bulk.get_entity(stk::topology::NODE_RANK, id));
+    for (int d = 0; d < ndof; ++d) {
+      ownedGids[ndof*k+d] = flattened_global_offset(id, ndof, d);
     }
   }
 
@@ -129,7 +136,7 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
     activeBuckets,
     [&](stk::mesh::Entity e) {
       const SolutionPointStatus status = solutionCat.status(e);
-      return (!is_skipped(status) && (!is_owned(status) && is_shared(status)));
+      return (!(is_skipped(status) || is_owned(status)) && is_shared(status));
   });
 
   int64_t numNodes = 0;
@@ -142,22 +149,22 @@ MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
     },
     [&numNodes](stk::mesh::Entity) { ++numNodes; }
   );
-  const int64_t maxSharedNotOwnedRowId = numNodes * MeshIdData::ndof;
+  const int64_t maxSharedNotOwnedRowId = numNodes * ndof;
 
-  std::vector<int64_t> sharedNotOwnedGids(MeshIdData::ndof, sharedNotOwnedEntityIds.size());
-  for (const auto id : sharedNotOwnedEntityIds) {
+  std::vector<int64_t> sharedNotOwnedGids(ndof * sharedNotOwnedEntityIds.size());
+  for (unsigned k = 0; k < sharedNotOwnedEntityIds.size(); ++k) {
+    const auto id = sharedNotOwnedEntityIds[k];
     localIds[id] = bulk.identifier(bulk.get_entity(stk::topology::NODE_RANK, id));
-    for (int d = 0; d < MeshIdData::ndof; ++d) {
-      sharedNotOwnedGids.push_back(GID_(id, MeshIdData::ndof, d));
+    for (int d = 0; d < ndof; ++d) {
+      sharedNotOwnedGids[ndof*k + d] = flattened_global_offset(id, ndof, d);
     }
   }
-
-  return MeshIdData { maxOwnedRowId, maxSharedNotOwnedRowId, localIds, ownedGids, sharedNotOwnedGids };
+  return MeshIdData(maxOwnedRowId, maxSharedNotOwnedRowId, localIds, ownedGids, sharedNotOwnedGids, {});
 }
 
-int64_t nalu_global_id(const GlobalIdFieldType& gidField, stk::mesh::Entity e)
+int64_t look_up_global_id_for_node(const GlobalIdFieldType& gidField, stk::mesh::Entity e)
 {
-  return GID_(*stk::mesh::field_data(gidField, e), MeshIdData::ndof, 0);
+  return flattened_global_offset(*stk::mesh::field_data(gidField, e), ndof, 0);
 }
 
 std::vector<int32_t> entity_offset_to_column_lid_map(
@@ -175,48 +182,49 @@ std::vector<int32_t> entity_offset_to_column_lid_map(
 
   for (const auto* ib : buckets) {
     for (auto e : *ib) {
-      entityToColLID[e.local_offset()] = totalColsMap.getLocalElement(nalu_global_id(gidField, e));
+      entityToColLID[e.local_offset()] = totalColsMap.getLocalElement(look_up_global_id_for_node(gidField, e));
     }
   }
   return entityToColLID;
 }
 
-//std::vector<int32_t> entity_offset_to_row_lid_map(
-//  const stk::mesh::BulkData& bulk,
-//  const GlobalIdFieldType& gidField,
-//  const SolutionPointCategorizer& cat,
-//  const stk::mesh::Selector& selector,
-//  const std::unordered_map<int64_t, int64_t>& localIdsMap,
-//  const std::unordered_map<stk::mesh::Entity, int64_t>& entityToLIDMap)
-//{
-//
-//
-//
-//  const stk::mesh::BulkData& bulk = realm_.bulk_data();
-//  stk::mesh::Selector selector = bulk.mesh_meta_data().universal_part() & !(realm_.get_inactive_selector());
-//  entityToLIDMap.assign(bulk.get_size_of_entity_index_space(), 2000000000);
-//  const stk::mesh::BucketVector& nodeBuckets = realm_.get_buckets(stk::topology::NODE_RANK, selector);
-//  for(const stk::mesh::Bucket* bptr : nodeBuckets) {
-//    const stk::mesh::Bucket& b = *bptr;
-//    const stk::mesh::EntityId* nodeIds = stk::mesh::field_data(*realm_.naluGlobalId_, b);
-//    for(size_t i=0; i<b.size(); ++i) {
-//      stk::mesh::Entity node = b[i];
-//
-//      auto iter = localIdsMap.find(nodeIds[i]);
-//      if (iter != localIdsMap.end()) {
-//        entityToLID_[node.local_offset()] = iter->second;
-//        if (nodeIds[i] != bulk.identifier(node)) {
-//          stk::mesh::Entity master = get_entity_master(bulk, node, nodeIds[i]);
-//          if (master != node) {
-//            entityToLID_[master.local_offset()] = entityToLID_[node.local_offset()];
-//          }
-//        }
-//      }
-//    }
-//  }
-//}
+stk::mesh::Entity get_entity_from_id(const stk::mesh::BulkData& bulk, int64_t id)
+{
+  ThrowAssert(bulk.is_valid(bulk.get_entity(stk::topology::NODE_RANK, id)));
+  return bulk.get_entity(stk::topology::NODE_RANK, id);
+}
 
-std::unordered_set<stk::mesh::EntityVector> element_to_node_map(const stk::mesh::BulkData& bulk, stk::mesh::Selector& selector)
+std::vector<int32_t> entity_offset_to_row_lid_map(
+  const stk::mesh::BulkData& bulk,
+  const GlobalIdFieldType& gidField,
+  const SolutionPointCategorizer& cat,
+  const stk::mesh::Selector& selector,
+  const std::unordered_map<int64_t, int64_t>& localIdToGlobalIdMap)
+{
+  std::vector<int32_t> entityRowMap;
+  entityRowMap.reserve(bulk.get_size_of_entity_index_space());
+  const auto& buckets = bulk.get_buckets(stk::topology::NODE_RANK, selector);
+  for (const auto* ib : buckets) {
+    const auto& bucket = *ib;
+    for (auto node : *ib) {
+      const int64_t globalId = look_up_global_id_for_node(gidField, node);
+      auto it = localIdToGlobalIdMap.find(globalId);
+      if (it != localIdToGlobalIdMap.end()) {
+        const int64_t mappedId = it->second;
+        entityRowMap[node.local_offset()] = mappedId;
+        if (is_slave(cat.type(node))) {
+          const auto masterNode = get_entity_from_id(bulk, globalId);
+          entityRowMap[masterNode.local_offset()] = mappedId;
+        }
+      }
+    }
+  }
+  return entityRowMap;
+}
+
+std::unordered_set<stk::mesh::EntityVector> element_to_node_lists(
+  const stk::mesh::BulkData& bulk,
+  stk::mesh::Selector& selector)
 {
   auto connections = std::unordered_set<stk::mesh::EntityVector>{};
   for (const auto* ib : bulk.get_buckets(stk::topology::ELEM_RANK, selector)) {

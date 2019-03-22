@@ -695,10 +695,10 @@ LowMachEquationSystem::solve_and_update()
 
     // compute mdot
     timeA = NaluEnv::self().nalu_time();
-    continuityEqSys_->computeMdotAlgDriver_->execute();
     stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);
     stk::mesh::field_copy(*continuityEqSys_->pressure_, *continuityEqSys_->provisionalPressure_);
     stk::mesh::field_copy(*continuityEqSys_->dpdx_, *continuityEqSys_->provisionalDpdx_);
+    continuityEqSys_->computeMdotAlgDriver_->execute();
     project_nodal_velocity();
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerMisc_ += (timeB-timeA);
@@ -759,13 +759,12 @@ LowMachEquationSystem::solve_and_update()
     continuityEqSys_->timerAssemble_ += (timeB-timeA);
 
     timeA = NaluEnv::self().nalu_time();
-    continuityEqSys_->computeMdotAlgDriver_->execute();
-    timeB = NaluEnv::self().nalu_time();
-    continuityEqSys_->timerMisc_ += (timeB-timeA);
-
     stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);
     stk::mesh::field_copy(*continuityEqSys_->pressure_, *continuityEqSys_->provisionalPressure_);
     stk::mesh::field_copy(*continuityEqSys_->dpdx_, *continuityEqSys_->provisionalDpdx_);
+    continuityEqSys_->computeMdotAlgDriver_->execute();
+    timeB = NaluEnv::self().nalu_time();
+    continuityEqSys_->timerMisc_ += (timeB-timeA);
 
     // project nodal velocity
     project_nodal_velocity();
@@ -851,8 +850,7 @@ LowMachEquationSystem::post_adapt_work()
     
     // compute wall function parameters (bip values)
     momentumEqSys_->compute_wall_function_params();
-    
-  }
+      }
 
 }
 
@@ -1283,7 +1281,8 @@ MomentumEquationSystem::register_interior_algorithm(
     if ( realm_.realmUsesEdges_ )
       throw std::runtime_error("MomentumElemSrcTerms::Error can not use element source terms for an edge-based scheme");
 
-    KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
+    //realm_.using_tensor_product_kernels()
+    KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_,realm_.using_tensor_product_kernels());
     auto& dataPreReqs = kb.data_prereqs();
     auto& dataPreReqsHO = kb.data_prereqs_HO();
 
@@ -1372,39 +1371,39 @@ MomentumEquationSystem::register_interior_algorithm(
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqs);
 
     kb.build_sgl_kernel_if_requested<MomentumAdvDiffHOElemKernel>
-      ("experimental_ho_advection_diffusion",
+      ("advection_diffusion",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_,
        realm_.is_turbulent()? evisc_ : visc_,
        dataPreReqsHO, false);
 
     kb.build_sgl_kernel_if_requested<MomentumAdvDiffHOElemKernel>
-      ("experimental_ho_advection_diffusion_reduced_sens",
+      ("advection_diffusion_reduced_sens",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_,
        realm_.is_turbulent()? evisc_ : visc_,
        dataPreReqsHO, true);
 
     kb.build_sgl_kernel_if_requested<MomentumMassHOElemKernel>
-      ("experimental_ho_momentum_time_derivative",
+      ("momentum_time_derivative",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<TGMMSHOElemKernel>
-      ("experimental_ho_tgmms",
+      ("tgmms",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<VariableDensityMomentumMMSHOElemKernel>
-      ("experimental_ho_vdmms",
+      ("vdmms",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<MomentumBuoyancySrcHOElemKernel>
-      ("experimental_ho_buoyancy",
+      ("buoyancy",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<MomentumBuoyancyBoussinesqSrcHOElemKernel>
-      ("experimental_ho_buoyancy_boussinesq",
+      ("buoyancy_boussinesq",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<MomentumCoriolisSrcHOElemKernel>
-      ("experimental_ho_EarthCoriolis",
+      ("EarthCoriolis",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.report();
@@ -1414,7 +1413,7 @@ MomentumEquationSystem::register_interior_algorithm(
   // include Nodal Mass algorithms
   std::vector<std::string> checkAlgNames = {"momentum_time_derivative",
                                             "lumped_momentum_time_derivative",
-                                            "experimental_ho_momentum_time_derivative"};
+                                            "momentum_time_derivative"};
   bool elementMassAlg = supp_alg_is_requested(checkAlgNames);
   // solver; time contribution (lumped mass matrix)
   if ( !elementMassAlg || nodal_src_is_requested() ) {
@@ -2937,6 +2936,7 @@ ContinuityEquationSystem::register_interior_algorithm(
       if ( realm_.realmUsesEdges_ )
         throw std::runtime_error("ContinuityElemSrcTerms::Error can not use element source terms for an edge-based scheme");
 
+      //realm_.using_tensor_product_kernels()
       KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
 
       kb.build_topo_kernel_if_requested<ContinuityMassElemKernel>
@@ -2951,24 +2951,20 @@ ContinuityEquationSystem::register_interior_algorithm(
       ("advection",
         realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs());
 
-      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
-      ("experimental_ho_density_time_derivative",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
-
-      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
-      ("experimental_ho_density_time_derivative",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
-
       kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
-      ("experimental_ho_advection",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), false);
-
-      kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
-      ("experimental_ho_advection_reduced_sens",
+      ("advection_reduced_sens",
         realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), true);
 
+      kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
+      ("advection",
+        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), false);
+
+      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
+      ("density_time_derivative",
+        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
+
       kb.build_sgl_kernel_if_requested<VariableDensityContinuityMMSHOElemKernel>
-        ("experimental_ho_vdmms",
+        ("vdmms",
           realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
 
       kb.report();
@@ -3159,7 +3155,6 @@ ContinuityEquationSystem::register_inflow_bc(
   
   // solver; lhs
   if ( realm_.solutionOptions_->useConsolidatedBcSolverAlg_ ) {      
-
     auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
     
     AssembleElemSolverAlgorithm* solverAlg = nullptr;

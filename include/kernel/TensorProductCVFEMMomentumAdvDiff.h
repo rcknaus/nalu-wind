@@ -424,9 +424,9 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(XH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
-          + (local_grad[ZH][ZH] - one_third_divu)* areav[ZH];
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
     }
   }
@@ -480,7 +480,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(YH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
@@ -535,7 +535,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(ZH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }

@@ -48,21 +48,27 @@ PressurePoissonHOElemKernel<AlgTraits>::PressurePoissonHOElemKernel(
 {
   const stk::mesh::MetaData& meta_data = bulkData.mesh_meta_data();
   coordinates_ = meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, solnOpts.get_coordinates_name());
+  dataPreReqs.add_gathered_nodal_field(*coordinates_, AlgTraits::nDim_);
+
 
   pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure")
       ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
+
+
   Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx")
       ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
+
   density_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density")
       ->field_of_state(stk::mesh::StateNP1);
+
+  dataPreReqs.add_gathered_nodal_field(*density_, 1);
+
   velocity_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "velocity")
       ->field_of_state(stk::mesh::StateNP1);
-
-  dataPreReqs.add_gathered_nodal_field(*coordinates_, AlgTraits::nDim_);
-  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
-  dataPreReqs.add_gathered_nodal_field(*density_, 1);
-  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
   dataPreReqs.add_gathered_nodal_field(*velocity_, AlgTraits::nDim_);
+
 }
 
 //--------------------------------------------------------------------------
@@ -75,25 +81,24 @@ PressurePoissonHOElemKernel<AlgTraits>::execute(
   auto coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
 
   scs_vector_workview l_metric(0);
-  auto& metric = l_metric.view();
-  high_order_metrics::compute_laplacian_metric_linear(ops_, coords, metric);
+  auto& laplacian_metric = l_metric.view();
+  high_order_metrics::compute_laplacian_metric_linear(ops_, coords, laplacian_metric);
 
+  scs_scalar_workview work_mdot;
+  auto& mdot = work_mdot.view();
+  {
+    auto pressure = scratchViews.get_scratch_view<nodal_scalar_view>(*pressure_);
+    auto pvel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
 
-  auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
-  auto vel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
-  auto Gp = scratchViews.get_scratch_view<nodal_vector_view>(*Gp_);
-  auto pressure = scratchViews.get_scratch_view<nodal_scalar_view>(*pressure_);
-  scs_scalar_workview l_mdot(0);
-  auto& mdot = l_mdot.view();
-  high_order_metrics::compute_mdot_linear(ops_, coords, metric, projTimeScale_, rho, vel, Gp, pressure, mdot);
-
+    auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
+    auto Gp = scratchViews.get_scratch_view<nodal_vector_view>(*Gp_);
+    high_order_metrics::compute_mdot_linear(ops_, coords, laplacian_metric, projTimeScale_,  rho, pvel, Gp, pressure, mdot);
+  }
   nodal_scalar_view v_rhs(rhs.data());
-//  high_order_metrics::scale_metric(ops_,density_, metric);
-
-  tensor_assembly::pressure_poisson_rhs(ops_, projTimeScale_, l_mdot.view(), v_rhs);
+  tensor_assembly::pressure_poisson_rhs(ops_, projTimeScale_, mdot, v_rhs);
 
   matrix_view v_lhs(lhs.data());
-  tensor_assembly::scalar_diffusion_lhs(ops_, metric, v_lhs, reduced_sens_);
+  tensor_assembly::scalar_diffusion_lhs(ops_, laplacian_metric, v_lhs, reduced_sens_);
 }
 
 INSTANTIATE_KERNEL_HOSGL(PressurePoissonHOElemKernel)

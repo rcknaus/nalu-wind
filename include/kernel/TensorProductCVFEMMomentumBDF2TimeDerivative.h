@@ -19,7 +19,7 @@ namespace tensor_assembly {
 template <int poly_order, typename Scalar>
 void momentum_dt_lhs(
   const CVFEMOperators<poly_order, Scalar>& ops,
-  const nodal_scalar_view<poly_order, Scalar>& metric,
+  const nodal_scalar_view<poly_order, Scalar>& vol,
   double gamma1_div_dt,
   const nodal_scalar_view<poly_order, Scalar>& rho_p1,
   matrix_vector_view<poly_order, Scalar>& lhs)
@@ -41,7 +41,7 @@ void momentum_dt_lhs(
           for (int j = 0; j < n1D; ++j) {
             auto gammaWnkWmj = gammaWnk * weight(m, j);
             for (int i = 0; i < n1D; ++i) {
-              const Scalar lhsfac = gammaWnkWmj * weight(l, i) * metric(k, j, i) * rho_p1(k, j, i);
+              const Scalar lhsfac = gammaWnkWmj * weight(l, i) * vol(k, j, i) * rho_p1(k, j, i);
               lhs(rowIndices[XH], idx<n1D>(XH, k, j, i)) += lhsfac;
               lhs(rowIndices[YH], idx<n1D>(YH, k, j, i)) += lhsfac;
               lhs(rowIndices[ZH], idx<n1D>(ZH, k, j, i)) += lhsfac;

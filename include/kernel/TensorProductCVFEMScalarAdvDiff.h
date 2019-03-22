@@ -373,10 +373,10 @@ void scalar_advdiff_rhs(
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < nscs; ++i) {
-        v_integrand(k,j,i) = metric(XH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                           + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                           + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH)
-                           - mdot(XH, k, j, i) * phi_scs(k, j, i);
+        const auto grad_phi_dot_a = metric(XH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
+                                  + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                                  + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+        v_integrand(k, j, i) = grad_phi_dot_a - mdot(XH, k, j, i) * phi_scs(k, j, i);
       }
     }
   }
@@ -387,10 +387,10 @@ void scalar_advdiff_rhs(
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < nscs; ++j) {
       for (int i = 0; i < n1D; ++i) {
-        v_integrand(k, j, i) = metric(YH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH)
-                             - mdot(YH, k, j, i) * phi_scs(k, j, i);
+        const auto grad_phi_dot_a = metric(YH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
+                                  + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                                  + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+        v_integrand(k, j, i) = grad_phi_dot_a - mdot(YH, k, j, i) * phi_scs(k, j, i);
       }
     }
   }
@@ -401,10 +401,10 @@ void scalar_advdiff_rhs(
   for (int k = 0; k < nscs; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
-        v_integrand(k, j, i) = metric(ZH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH)
-                             - mdot(ZH, k, j, i) * phi_scs(k, j, i);
+        const auto grad_phi_dot_a = metric(ZH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
+                                  + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                                  + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+        v_integrand(k, j, i) = grad_phi_dot_a - mdot(ZH, k, j, i) * phi_scs(k, j, i);
       }
     }
   }

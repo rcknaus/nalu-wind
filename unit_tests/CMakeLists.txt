@@ -42,6 +42,7 @@ add_sources(GlobalUnitSourceList
    UnitTestSpinnerLidarPattern.C
    UnitTestSuppAlgDataSharing.C
    UnitTestTpetra.C
+   UnitTestTpetraMeshManager.C
    UnitTestUtils.C
 )
 

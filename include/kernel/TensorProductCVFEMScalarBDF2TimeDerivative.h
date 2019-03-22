@@ -89,23 +89,23 @@ void density_dt_rhs(
 {
   constexpr int n1D = poly_order + 1;
 
-  nodal_scalar_workview<poly_order, Scalar> work_drhodt(0);
-  auto& drhodt = work_drhodt.view();
+  nodal_scalar_workview<poly_order, Scalar> work_drhoudt(0);
+  auto& drhoqdt = work_drhoudt.view();
+  const double inv_projTimeScale = gamma_div_dt[0];
 
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
-          drhodt(k, j, i) = -(
+          drhoqdt(k, j, i) = -(
                 gamma_div_dt[0] * rhop1(k, j, i)
               + gamma_div_dt[1] * rhop0(k, j, i)
               + gamma_div_dt[2] * rhom1(k, j, i)
-              ) * metric(k, j, i);
+              ) * metric(k, j, i) *inv_projTimeScale;
       }
     }
   }
-  ops.volume(drhodt, rhs);
+  ops.volume(drhoqdt, rhs);
 }
-
 
 }
 }

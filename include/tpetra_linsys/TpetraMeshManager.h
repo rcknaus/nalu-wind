@@ -26,18 +26,33 @@ namespace sierra {
 namespace nalu {
 
 struct MeshIdData {
-  static constexpr int ndof = 1;
+  MeshIdData(
+    int64_t mowrid,
+    int64_t msnowrid,
+    std::unordered_map<int64_t, int64_t> lids,
+    std::vector<int64_t> ogids,
+    std::vector<int64_t> snogids,
+    std::vector<stk::ParallelMachine> spids)
+  : maxOwnedRowId_(mowrid),
+    maxSharedNotOwnedRowId_(msnowrid),
+    localIds_(lids),
+    ownedGids_(ogids),
+    sharedNotOwnedGids_(snogids),
+    sharedPids_(spids)
+  {}
+
   int64_t maxOwnedRowId_;
   int64_t maxSharedNotOwnedRowId_;
   std::unordered_map<int64_t, int64_t> localIds_;
   std::vector<int64_t> ownedGids_;
   std::vector<int64_t> sharedNotOwnedGids_;
   std::vector<stk::ParallelMachine> sharedPids_;
+
 };
 
-MeshIdData determine_mesh_id_info(stk::mesh::BulkData& bulk,
+MeshIdData determine_mesh_id_info(
+  stk::mesh::BulkData& bulk,
   GlobalIdFieldType& gidField,
-  int numDof,
   stk::mesh::Selector activeSelector,
   stk::mesh::PartVector periodicParts = {},
   stk::mesh::PartVector nonconformalParts = {});
