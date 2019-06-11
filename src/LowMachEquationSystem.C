@@ -1055,7 +1055,7 @@ LowMachEquationSystem::solve_and_update()
       timeB = NaluEnv::self().nalu_time();
       continuityEqSys_->timerAssemble_ += (timeB-timeA);
 
-      std::cout << "contuity it count: " << momSolv.solver_->iteration_count() << std::endl;
+      std::cout << "continuity it count: " << contSolv.solver_->iteration_count() << std::endl;
 
     }
 
