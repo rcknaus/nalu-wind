@@ -1,4 +1,6 @@
 add_sources(GlobalSourceList
+   ConductionKernel.C
+   ContinuityKernel.C
    ContinuityAdvElemKernel.C
    ContinuityInflowElemKernel.C
    ContinuityMassElemKernel.C
@@ -9,10 +11,14 @@ add_sources(GlobalSourceList
    MomentumAdvDiffElemKernel.C
    MomentumAdvDiffHOElemKernel.C
    MomentumBuoyancyBoussinesqSrcElemKernel.C
+   MomentumBuoyancyBoussinesqSrcHOElemKernel.C
    MomentumBuoyancySrcElemKernel.C
    MomentumBuoyancySrcHOElemKernel.C
    MomentumCoriolisSrcElemKernel.C
+   MomentumCoriolisSrcHOElemKernel.C
    MomentumHybridTurbElemKernel.C
+   MomentumInflowElemKernel.C
+   MomentumKernel.C
    MomentumMassElemKernel.C
    MomentumMassHOElemKernel.C
    MomentumOpenAdvDiffElemKernel.C
@@ -27,10 +33,12 @@ add_sources(GlobalSourceList
    ScalarDiffHOElemKernel.C
    ScalarDiffFemKernel.C
    ScalarFluxPenaltyElemKernel.C
+   ScalarInflowElemKernel.C
    ScalarMassElemKernel.C
    ScalarMassHOElemKernel.C
    ScalarOpenAdvElemKernel.C
    ScalarUpwAdvDiffElemKernel.C
+   SparsifiedEdgeLaplacian.C
    SpecificDissipationRateSSTSrcElemKernel.C
    TurbKineticEnergyKsgsDesignOrderSrcElemKernel.C
    TurbKineticEnergyKsgsSrcElemKernel.C

@@ -70,7 +70,7 @@ ScalarMassHOElemKernel<AlgTraits>::ScalarMassHOElemKernel(
   densityNp1_ = &(density->field_of_state(stk::mesh::StateNP1));
   dataPreReqs.add_gathered_nodal_field(*densityNp1_, 1);
 
-  densityNm1_ = (scalarQ->number_of_states() == 2) ? densityN_ : &(density->field_of_state(stk::mesh::StateNM1));
+  densityNm1_ = (density->number_of_states() == 2) ? densityN_ : &(density->field_of_state(stk::mesh::StateNM1));
   dataPreReqs.add_gathered_nodal_field(*densityNm1_, 1);
 }
 //--------------------------------------------------------------------------
@@ -104,7 +104,8 @@ ScalarMassHOElemKernel<AlgTraits>::execute(
   auto rhop1 = scratchViews.get_scratch_view<nodal_scalar_view>(*densityNp1_);
 
   nodal_scalar_view v_rhs(rhs.data());
-  tensor_assembly::scalar_dt_rhs(ops_, vol, gamma_, rhom1, rhop0, rhop1, phim1, phip0, phip1, v_rhs);
+  tensor_assembly::density_weighted_scalar_dt_rhs(
+    ops_, vol, gamma_, rhom1, rhop0, rhop1, phim1, phip0, phip1, v_rhs);
 
   matrix_view v_lhs(lhs.data());
   tensor_assembly::scalar_dt_lhs(ops_, vol, gamma_[0], rhop1, v_lhs);

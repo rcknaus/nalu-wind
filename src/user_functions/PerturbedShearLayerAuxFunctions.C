@@ -51,20 +51,19 @@ public:
   double funvw(double y)
   {
     const double ymod = (do_wrap) ? wrap_value(y + M_PI, 2 * M_PI) : (y + M_PI);
-    return perturb_mag * std::exp(-100/(size_ratio_x*size_ratio_x) * (ymod-M_PI)*(ymod-M_PI));
+    const auto gaussScale = inv_perturbation_thickness * inv_perturbation_thickness;
+    return perturb_mag * std::exp(-gaussScale * (ymod-M_PI)*(ymod-M_PI));
   }
-
 
   const double size_ratio_x{4 * M_PI};
   const double size_ratio_y{16/3.0 * M_PI};
-  const double size_ratio_z{12 * M_PI};
+  const double size_ratio_z{16/3.0 * M_PI};
   const double perturb_mag{0.1};
-  const double inv_initial_vorticity_thickness{10/size_ratio_x};
+  const double inv_perturbation_thickness{15/size_ratio_y};
+  const double inv_initial_vorticity_thickness{30/size_ratio_y};
   const bool do_wrap{false};
 };
-
 }
-
 
 void
 PerturbedShearLayerVelocityAuxFunction::do_evaluate(
@@ -79,10 +78,10 @@ PerturbedShearLayerVelocityAuxFunction::do_evaluate(
 {
   std::mt19937 rng;
   rng.seed(std::mt19937::default_seed); // fixed seed
-  std::uniform_real_distribution<double> r1(-0.05, 0.05);
+  std::uniform_real_distribution<double> r1(-0.1, 0.1);
 
   const double kx = 2;
-  const double kz = 32;
+  const double kz = 20;
   ShearLayerHelper slh;
 
   for (unsigned p = 0; p < numPoints; ++p) {

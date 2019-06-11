@@ -102,10 +102,12 @@ void TpetraLinearSolver::setupLinearSolver(
     preconditioner_->setParameters(*paramsPrecond_);
     
     // delay initialization for some preconditioners
-    if ( "RILUK" != preconditionerType_ ) {
-      preconditioner_->initialize();
+    if (computePreconditioner) {
+      if ( "RILUK" != preconditionerType_ ) {
+        preconditioner_->initialize();
+      }
+      problem_->setRightPrec(preconditioner_);
     }
-    problem_->setRightPrec(preconditioner_);
 
     // create the solver, e.g., gmres, cg, tfqmr, bicgstab
     LinSys::SolverFactory sFactory;
@@ -135,7 +137,11 @@ void TpetraLinearSolver::setMueLu()
 
     if (recomputePreconditioner_ || mueluPreconditioner_ == Teuchos::null)
     {
-      mueluPreconditioner_ = MueLu::CreateTpetraPreconditioner<SC,LO,GO,NO>(Teuchos::RCP<Tpetra::Operator<SC,LO,GO,NO> >(matrix_), *paramsPrecond_);
+//      auto params = Teuchos::parameterList();
+//      params->set("xml parameter file", "milestone.xml");
+
+      mueluPreconditioner_ = MueLu::CreateTpetraPreconditioner<SC,LO,GO,NO>(
+        Teuchos::RCP<Tpetra::Operator<SC,LO,GO,NO> >(matrix_), *paramsPrecond_);
     }
     else if (reusePreconditioner_) {
       MueLu::ReuseTpetraPreconditioner(matrix_, *mueluPreconditioner_);
@@ -144,7 +150,9 @@ void TpetraLinearSolver::setMueLu()
       Teuchos::TimeMonitor::summarize(std::cout, false, true, false, Teuchos::Union);
   }
 
-  problem_->setRightPrec(mueluPreconditioner_);
+  if (computePreconditioner) {
+    problem_->setRightPrec(mueluPreconditioner_);
+  }
 
   // create the solver, e.g., gmres, cg, tfqmr, bicgstab
   LinSys::SolverFactory sFactory;
@@ -201,10 +209,12 @@ TpetraLinearSolver::solve(
   }
   else
   {
-    if ( "RILUK" == preconditionerType_ ) {
-      preconditioner_->initialize();
+    if (computePreconditioner) {
+      if ( "RILUK" == preconditionerType_ ) {
+        preconditioner_->initialize();
+      }
+      preconditioner_->compute();
     }
-    preconditioner_->compute();
   }
   time += NaluEnv::self().nalu_time();
 

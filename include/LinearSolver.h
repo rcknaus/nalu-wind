@@ -139,6 +139,7 @@ private:
  */
 class LinearSolver
 {
+
   public:
     LinearSolver(
       std::string name,
@@ -196,6 +197,7 @@ class LinearSolver
 class TpetraLinearSolver : public LinearSolver
 {
   public:
+  static constexpr bool computePreconditioner = true;
 
   /**
    *  @param[in] solverName The name of the solver

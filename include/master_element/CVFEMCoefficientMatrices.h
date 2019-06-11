@@ -15,43 +15,64 @@
 namespace sierra {
 namespace nalu{
 
-template <int p, typename Scalar = DoubleType>
+template <int p, typename Scalar>
 struct CoefficientMatrices
 {
-  using value_type = Scalar;
+  using value_type = double;
   constexpr static int poly_order = p;
-  CoefficientMatrices(const double* nodeLocs, const double* scsLocs)
-  : scsDeriv(coefficients::scs_derivative_weights<p, Scalar>(nodeLocs, scsLocs)),
-    scsInterp(coefficients::scs_interpolation_weights<p, Scalar>(nodeLocs, scsLocs)),
-    nodalWeights(coefficients::nodal_integration_weights<p, Scalar>(nodeLocs, scsLocs)),
-    nodalDeriv(coefficients::nodal_derivative_weights<p, Scalar>(nodeLocs)),
-    linearNodalInterp(coefficients::linear_nodal_interpolation_weights<p, Scalar>(nodeLocs)),
-    linearScsInterp(coefficients::linear_scs_interpolation_weights<p, Scalar>(scsLocs)),
-    lumpedNodalWeights(coefficients::lumped_nodal_integration_weights<p,Scalar>(nodeLocs,scsLocs))
-  {};
-
-  CoefficientMatrices()
-  : scsDeriv(coefficients::scs_derivative_weights<p, Scalar>()),
-    scsInterp(coefficients::scs_interpolation_weights<p, Scalar>()),
-    nodalWeights(coefficients::nodal_integration_weights<p, Scalar>()),
-    nodalDeriv(coefficients::nodal_derivative_weights<p, Scalar>()),
-    difference(coefficients::difference_matrix<p, Scalar>()),
-    linearNodalInterp(coefficients::linear_nodal_interpolation_weights<p, Scalar>()),
-    linearScsInterp(coefficients::linear_scs_interpolation_weights<p, Scalar>()),
-    lumpedNodalWeights(coefficients::lumped_nodal_integration_weights<p,Scalar>())
-  {};
-
-  const scs_matrix_view<p, Scalar> scsDeriv;
-  const scs_matrix_view<p, Scalar> scsInterp;
-  const nodal_matrix_view<p, Scalar> nodalWeights;
-  const nodal_matrix_view<p, Scalar> nodalDeriv;
-  const nodal_matrix_view<p, Scalar> difference;
-  const linear_nodal_matrix_view<p, Scalar> linearNodalInterp;
-  const linear_scs_matrix_view<p, Scalar> linearScsInterp;
-  const nodal_matrix_view<p, Scalar> lumpedNodalWeights;
+  const scs_matrix_array<double, p> scsDeriv{coeffs::scs_derivative_weights<double, p>()};
+  const scs_matrix_array<double, p> scsInterp{coeffs::scs_interpolation_weights<double, p>()};
+  const nodal_matrix_array<double, p> nodalWeights{coeffs::nodal_integration_weights<double, p>()};
+  const nodal_matrix_array<double, p> lumpedNodalWeights{coeffs::lumped_nodal_integration_weights<double, p>()};
+  const nodal_matrix_array<double, p> nodalDeriv{coeffs::nodal_derivative_weights<double, p>()};
+  const linear_nodal_matrix_array<double, p> linearNodalInterp{coeffs::linear_nodal_interpolation_weights<double, p>()};
+  const linear_scs_matrix_array<double, p> linearScsInterp{coeffs::linear_scs_interpolation_weights<double, p>()};
 };
+
+template <int p> struct StaticCoefficientMatrices {};
+
+//  const nodal_matrix_array<double, p> nodalWeights{coeffs::nodal_integration_weights<double, p>()};
+
+//
+//namespace static_coeffs {
+//  constexpr LocalArray<double[2]> scsDeriv = {{-0.5, +0.5 }};
+//}
+
+
+
+//template <typename ArrayType, typename Enable = void> struct Data{};
+//
+//template <typename ArrayType>
+//struct Data<ArrayType, typename std::enable_if<std::rank<ArrayType>::value == 1>::type>
+//{
+//  double internal_data_[2];
+//
+//  using value_type = typename std::remove_all_extents<ArrayType>::type;
+//  KOKKOS_FORCEINLINE_FUNCTION value_type& operator()(int i) { return internal_data_[i]; }
+//  KOKKOS_FORCEINLINE_FUNCTION  const value_type& operator()(int i) const { return internal_data_[i]; }
+//};
+//
+//
+//template <typename ArrayType>
+//struct TestData { double data_[2]; };
+//
+//struct StaticCoeffs
+//{
+//  static constexpr TestData<double[2]> scsDeriv{{-0.5, +0.5 }};
+//};
+
+
+//namespace StaticCoeffs {
+//  constexpr StaticLocalArray<double[2]> scsDeriv = {{-0.5, +0.5}};
+//}
+
+//template <> struct StaticCoefficientMatrices<1> {
+//  static constexpr StaticLocalArray<double[2]> scsDeriv = {{-0.5, +0.5}};
+//};
+
 
 } // namespace naluUnit
 } // namespace Sierra
 
 #endif
+

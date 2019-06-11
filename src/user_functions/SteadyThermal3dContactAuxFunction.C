@@ -21,7 +21,7 @@ SteadyThermal3dContactAuxFunction::SteadyThermal3dContactAuxFunction() :
   AuxFunction(0,1),
   a_(1.0),
   k_(1.0),
-  pi_(std::acos(-1.0))
+  pi_(M_PI)
 {
   // nothing to do
 }
@@ -44,7 +44,9 @@ SteadyThermal3dContactAuxFunction::do_evaluate(
     double y = coords[1];
     double z = coords[2];
 
-    fieldPtr[0] = k_/4.0*(cos(2.*a_*pi_*x) + cos(2.*a_*pi_*y) + cos(2.*a_*pi_*z));
+    fieldPtr[0] = std::cos(M_PI*x);
+
+//    fieldPtr[0] = k_/4.0*(cos(2.*a_*pi_*x) + cos(2.*a_*pi_*y) + cos(2.*a_*pi_*z));
     
     fieldPtr += fieldSize;
     coords += spatialDimension;

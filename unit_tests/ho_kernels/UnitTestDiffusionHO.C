@@ -68,12 +68,12 @@ single_cube_element_laplacian()
 {
   constexpr int npe = (p + 1) * (p + 1) * (p + 1);
 
-  auto deriv = coefficients::scs_derivative_weights<p, double>();
-  auto integ = coefficients::nodal_integration_weights<p, double>();
+  auto deriv = coeffs::scs_derivative_weights<p, double>();
+  auto integ = coeffs::nodal_integration_weights<p, double>();
 
   // helper matrices
-  auto diff = coefficients::difference_matrix<p, double>();
-  auto identity = coefficients::identity_matrix<p, double>();
+  auto diff = coeffs::difference_matrix<p, double>();
+  auto identity = coeffs::identity_matrix<p, double>();
 
   Kokkos::View<double[p+1][p+1]> laplacian1D{"laplacian 1D"};
   Kokkos::deep_copy(laplacian1D, 0);
@@ -117,11 +117,11 @@ single_cube_element_stiffness()
 {
   constexpr int npe = (p + 1) * (p + 1) * (p + 1);
 
-  auto deriv = coefficients::scs_derivative_weights<p, double>();
-  auto integ = coefficients::nodal_integration_weights<p, double>();
+  auto deriv = coeffs::scs_derivative_weights<p, double>();
+  auto integ = coeffs::nodal_integration_weights<p, double>();
 
   // helper matrices
-  auto diff = coefficients::difference_matrix<p, double>();
+  auto diff = coeffs::difference_matrix<p, double>();
 
   Kokkos::View<double[p+1][p+1]> stiffness{"laplacian 1D"};
   Kokkos::deep_copy(stiffness, 0);

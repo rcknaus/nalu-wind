@@ -33,7 +33,6 @@ namespace nalu{
 
 class MasterElement;
 
-
 inline std::array<stk::mesh::Entity, simdLen>
 load_simd_elems(const stk::mesh::Bucket& b, int bktIndex, int /* bucketLen */, int numSimdElems)
 {

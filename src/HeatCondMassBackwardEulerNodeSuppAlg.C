@@ -74,8 +74,8 @@ HeatCondMassBackwardEulerNodeSuppAlg::node_execute(
   const double cp     = *stk::mesh::field_data(*specificHeat_, node);
   const double dualVolume = *stk::mesh::field_data(*dualNodalVolume_, node);
   const double lhsTime = rho*cp*dualVolume/dt_;
-  rhs[0] -= lhsTime*(tNp1 - tN);
-  lhs[0] += lhsTime;
+//  rhs[0] -= lhsTime*(tNp1 - tN);
+//  lhs[0] += lhsTime;
 }
 
 } // namespace nalu

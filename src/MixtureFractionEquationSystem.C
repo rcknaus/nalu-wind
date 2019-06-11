@@ -60,6 +60,7 @@
 
 // bc kernels
 #include <kernel/ScalarOpenAdvElemKernel.h>
+#include <kernel/ScalarInflowElemKernel.h>
 
 // deprecated
 #include <ScalarMassElemSuppAlgDep.h>
@@ -398,6 +399,7 @@ MixtureFractionEquationSystem::register_interior_algorithm(
     if ( realm_.realmUsesEdges_ )
       throw std::runtime_error("MixtureFraction::Error can not use element source terms for an edge-based scheme");
     
+    //realm_.using_tensor_product_kernels()
     KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
     auto& dataPreReqs = kb.data_prereqs();
     auto& dataPreReqsHO = kb.data_prereqs_HO();
@@ -425,7 +427,7 @@ MixtureFractionEquationSystem::register_interior_algorithm(
     kb.build_topo_kernel_if_requested<ScalarNSOElemKernel>
         ("NSO_2ND_ALT",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, evisc_, 0.0, 1.0, dataPreReqs);
-      
+
     kb.build_topo_kernel_if_requested<ScalarNSOElemKernel>
         ("NSO_4TH",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, evisc_, 1.0, 0.0, dataPreReqs);
@@ -443,11 +445,11 @@ MixtureFractionEquationSystem::register_interior_algorithm(
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dzdx_, realm_.get_turb_schmidt(mixFrac_->name()), 1.0, dataPreReqs);
 
     kb.build_sgl_kernel_if_requested<ScalarMassHOElemKernel>
-        ("experimental_ho_mass",
+        ("mixture_fraction_time_derivative",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<ScalarAdvDiffHOElemKernel>
-        ("experimental_ho_advection_diffusion",
+        ("advection_diffusion",
          realm_.bulk_data(), *realm_.solutionOptions_, mixFrac_, evisc_, dataPreReqsHO);
 
     kb.report();
@@ -556,18 +558,35 @@ MixtureFractionEquationSystem::register_inflow_bc(
     }
   }
 
-  // Dirichlet bc
-  std::map<AlgorithmType, SolverAlgorithm *>::iterator itd =
-    solverAlgDriver_->solverDirichAlgMap_.find(algType);
-  if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
-    DirichletBC *theAlg
-      = new DirichletBC(realm_, this, part, &mixFracNp1, theBcField, 0, 1);
-    solverAlgDriver_->solverDirichAlgMap_[algType] = theAlg;
+  // solver; lhs
+  if ( realm_.solutionOptions_->useConsolidatedBcSolverAlg_ ) {
+    auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
+    stk::topology elemTopo = get_elem_topo(realm_, *part);
+    AssembleFaceElemSolverAlgorithm* faceElemSolverAlg = nullptr;
+    bool solverAlgWasBuilt = false;
+
+    std::tie(faceElemSolverAlg, solverAlgWasBuilt)
+      = build_or_add_part_to_face_elem_solver_alg(algType, *this, *part, elemTopo, solverAlgMap, "inflow");
+
+    auto& activeKernels = faceElemSolverAlg->activeKernels_;
+
+    if (solverAlgWasBuilt) {
+      build_face_elem_topo_kernel_automatic<ScalarInflowElemKernel>
+        (part->topology(), elemTopo, *this, activeKernels, "mixture_fraction_inflow",
+         realm_.bulk_data(), *realm_.solutionOptions_, mixFracNp1, *theBcField, *evisc_,
+         faceElemSolverAlg->faceDataNeeded_, faceElemSolverAlg->elemDataNeeded_);
+    }
   }
   else {
-    itd->second->partVec_.push_back(part);
+    auto itd = solverAlgDriver_->solverDirichAlgMap_.find(algType);
+    if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
+      solverAlgDriver_->solverDirichAlgMap_[algType] =
+          new DirichletBC(realm_, this, part, &mixFracNp1, theBcField, 0, 1);
+    }
+    else {
+      itd->second->partVec_.push_back(part);
+    }
   }
-
 }
 
 //--------------------------------------------------------------------------

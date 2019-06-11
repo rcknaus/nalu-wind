@@ -57,20 +57,20 @@ ScalarAdvDiffHOElemKernel<AlgTraits>::ScalarAdvDiffHOElemKernel(
   diffFluxCoeff_ = &diffFluxCoeff->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*diffFluxCoeff_, 1);
 
-  Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx")
-      ->field_of_state(stk::mesh::StateNone);
-  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
-
-  pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure")
-      ->field_of_state(stk::mesh::StateNone);
-  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
-
   density_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density")
       ->field_of_state(stk::mesh::StateNP1);
   dataPreReqs.add_gathered_nodal_field(*density_, 1);
 
-  velocity_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "velocity")
-      ->field_of_state(stk::mesh::StateNP1);
+  Gp_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_dpdx")
+      ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*Gp_, AlgTraits::nDim_);
+
+  pressure_ = &meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "provisional_pressure")
+      ->field_of_state(stk::mesh::StateNone);
+  dataPreReqs.add_gathered_nodal_field(*pressure_, 1);
+
+  velocity_ = &meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_velocity")
+      ->field_of_state(stk::mesh::StateNone);
   dataPreReqs.add_gathered_nodal_field(*velocity_, AlgTraits::nDim_);
 }
 //--------------------------------------------------------------------------
@@ -82,29 +82,28 @@ ScalarAdvDiffHOElemKernel<AlgTraits>::execute(
 {
   auto coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
 
-  scs_vector_workview work_metric(0);
-  auto& metric = work_metric.view();
-  high_order_metrics::compute_laplacian_metric_linear(ops_, coords, metric);
+  scs_vector_workview work_metric;
+  auto& laplacian_metric = work_metric.view();
+  high_order_metrics::compute_laplacian_metric_linear(ops_, coords, laplacian_metric);
 
-  scs_scalar_workview work_mdot(0);
+  scs_scalar_workview work_mdot;
   auto& mdot = work_mdot.view();
   {
-    // FIXME: no ability to save off the new mdot in kernel ATM.  So we just recompute it
-    auto vel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
     auto pressure = scratchViews.get_scratch_view<nodal_scalar_view>(*pressure_);
+    auto pvel = scratchViews.get_scratch_view<nodal_vector_view>(*velocity_);
     auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
     auto Gp = scratchViews.get_scratch_view<nodal_vector_view>(*Gp_);
-    high_order_metrics::compute_mdot_linear(ops_, coords, metric, projTimeScale_,  rho, vel, Gp, pressure, mdot);
+    high_order_metrics::compute_mdot_linear(ops_, coords, laplacian_metric, projTimeScale_,  rho, pvel, Gp, pressure, mdot);
   }
   auto diff = scratchViews.get_scratch_view<nodal_scalar_view>(*diffFluxCoeff_);
-  high_order_metrics::scale_metric(ops_, diff, metric);
-
-  matrix_view v_lhs(lhs.data());
-  tensor_assembly::scalar_advdiff_lhs(ops_, mdot, metric, v_lhs);
+  high_order_metrics::scale_metric(ops_, diff, laplacian_metric);
 
   auto scalar = scratchViews.get_scratch_view<nodal_scalar_view>(*scalarQ_);
   nodal_scalar_view v_rhs(rhs.data());
-  tensor_assembly::scalar_advdiff_rhs(ops_, mdot, metric, scalar, v_rhs);
+  tensor_assembly::scalar_advdiff_rhs(ops_, mdot, laplacian_metric, scalar, v_rhs);
+
+  matrix_view v_lhs(lhs.data());
+  tensor_assembly::scalar_advdiff_lhs(ops_, mdot, laplacian_metric, v_lhs);
 }
 
 INSTANTIATE_KERNEL_HOSGL(ScalarAdvDiffHOElemKernel)

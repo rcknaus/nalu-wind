@@ -658,6 +658,9 @@ class Realm {
    */
   bool hypreIsActive_{false};
 
+  bool is_output_step();
+
+
 protected:
   std::unique_ptr<ngp::Mesh> ngpMesh_;
 

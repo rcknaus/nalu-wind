@@ -32,6 +32,9 @@ class ProjectedNodalGradientEquationSystem;
 class HeatCondEquationSystem : public EquationSystem {
 
 public:
+  static constexpr bool doMatrixFree = true;
+  static constexpr int p = 4;
+
   HeatCondEquationSystem(
     EquationSystems& equationSystems);
   virtual ~HeatCondEquationSystem();

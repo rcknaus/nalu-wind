@@ -42,7 +42,20 @@ Kokkos::View<int***> exodus_hex27_node_map()
 
 Kokkos::View<int***> make_node_map_hex(int p, bool isPromoted)
 {
-  if (!isPromoted) return exodus_hex27_node_map();
+  if (p == 1) {
+    Kokkos::View<int***> node_map("node_map", 2, 2, 2);
+    node_map(0,0,0) = 0;
+    node_map(0,0,1) = 1;
+    node_map(0,1,0) = 3;
+    node_map(0,1,1) = 2;
+    node_map(1,0,0) = 4;
+    node_map(1,0,1) = 5;
+    node_map(1,1,0) = 7;
+    node_map(1,1,1) = 6;
+    return node_map;
+  }
+
+  if (!isPromoted && p == 2) return exodus_hex27_node_map();
 
   const int nodes1D = p + 1;
   Kokkos::View<int***> node_map("node_map", nodes1D, nodes1D, nodes1D);

@@ -82,7 +82,7 @@ namespace high_order_metrics {
   }
 
   template <int p, typename Scalar>
-    void compute_mdot_linear(
+  void compute_mdot_linear(
       const CVFEMOperators<p, Scalar>& ops,
       const nodal_vector_view<p, Scalar>& xc,
       const scs_vector_view<p, Scalar>& laplacian_metric,
@@ -99,8 +99,8 @@ namespace high_order_metrics {
       NALU_ALIGNED Scalar base_box[3][8];
       hex_vertex_coordinates<p, Scalar>(xc, base_box);
 
-      nodal_vector_workview<p, Scalar> work_rhou_corr;
-      auto& rhou_corr = work_rhou_corr.view();
+      nodal_vector_array<Scalar, p> work_rhou_corr;
+      auto rhou_corr = la::make_view(work_rhou_corr);
 
       for (int k = 0; k < p + 1; ++k) {
         for (int j = 0; j < p + 1; ++j) {
@@ -113,11 +113,11 @@ namespace high_order_metrics {
         }
       }
 
-      nodal_vector_workview<p, Scalar> work_rhou_corrIp;
-      auto& rhou_corrIp = work_rhou_corrIp.view();
+      nodal_vector_array<Scalar, p> work_rhou_corrIp;
+      auto rhou_corrIp = la::make_view(work_rhou_corrIp);
 
-      nodal_vector_workview<p, Scalar> work_dpdxhIp;
-      auto& dpdxhIp = work_dpdxhIp.view();
+      nodal_vector_array<Scalar, p> work_dpdxhIp;
+      auto dpdxhIp = la::make_view(work_dpdxhIp);
 
       ops.scs_xhat_interp(rhou_corr, rhou_corrIp);
       ops.scs_xhat_grad(pressure, dpdxhIp);

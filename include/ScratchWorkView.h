@@ -11,6 +11,8 @@
 #include <KokkosInterface.h>
 #include <SimdInterface.h>
 
+#include <type_traits>
+
 namespace sierra {
 namespace nalu {
 
@@ -22,10 +24,7 @@ template <int n, typename ViewType> struct ScratchWorkView
 
   ScratchWorkView() = default;
 
-  explicit ScratchWorkView(value_type init_val)
-  {
-    for (int j = 0; j < n; ++j) data_[j] = init_val;
-  }
+  explicit ScratchWorkView(value_type init_val) { for (int j = 0; j < n; ++j) data_[j] = init_val; }
 
   ViewType& view() { return view_; }
   const ViewType& view() const {return view_; }
@@ -36,6 +35,19 @@ template <int n, typename ViewType> struct ScratchWorkView
   ViewType view_{data_.data()};
 };
 
+template <int N, int M, typename Scalar>
+struct alignas(KOKKOS_MEMORY_ALIGNMENT) Array2D
+{
+  alignas(KOKKOS_MEMORY_ALIGNMENT) Scalar data_[N * M];
+public:
+  static constexpr int row_len = N;
+  static constexpr int col_len = M;
+  using array_type = Scalar[M][N];
+  using value_type = Scalar;
+
+  KOKKOS_FORCEINLINE_FUNCTION Scalar& operator()(int j, int i) { return data_[N * j + i]; }
+  KOKKOS_FORCEINLINE_FUNCTION const Scalar& operator()(int j, int i) const { return data_[N * j + i]; }
+};
 
 } // namespace nalu
 } // namespace Sierra

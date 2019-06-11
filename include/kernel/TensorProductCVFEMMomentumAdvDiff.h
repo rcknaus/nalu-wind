@@ -424,9 +424,9 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(XH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
-          + (local_grad[ZH][ZH] - one_third_divu)* areav[ZH];
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
     }
   }
@@ -480,7 +480,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(YH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
@@ -535,7 +535,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(ZH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
@@ -604,6 +604,173 @@ void momentum_advdiff_rhs(
         integrand(k, j, i, XH) = tau_dot_a(ZH, k, j, i, XH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, XH);
         integrand(k, j, i, YH) = tau_dot_a(ZH, k, j, i, YH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, YH);
         integrand(k, j, i, ZH) = tau_dot_a(ZH, k, j, i, ZH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_zhat(integrand, rhs);
+}
+
+template <int poly_order, typename Scalar>
+void split_momentum_advdiff_rhs(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const scs_vector_view<poly_order, Scalar>& metric,
+  const scs_scalar_view<poly_order, Scalar>& mdot,
+  const nodal_vector_view<poly_order, Scalar>& delta,
+  nodal_vector_view<poly_order, Scalar>& rhs)
+{
+  // linearized, dimensionally-split rhs
+
+  constexpr int n1D = poly_order + 1;
+  constexpr int nscs = poly_order;
+
+  nodal_vector_workview<poly_order, Scalar> work_integrand(0);
+  auto& integrand = work_integrand.view();
+
+  nodal_vector_workview<poly_order, Scalar> work_vel_scs(0);
+  auto& vel_scs = work_vel_scs.view();
+
+  nodal_tensor_workview<poly_order,Scalar> work_grad_u(0);
+  auto& grad_vel_scs = work_grad_u.view();
+
+  ops.scs_xhat_grad(delta, grad_vel_scs);
+  ops.scs_xhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < nscs; ++i) {
+        const auto grad_u_dot_a = metric(XH, k, j, i, XH) * grad_vel_scs(k, j, i, XH, XH)
+                                + metric(XH, k, j, i, YH) * grad_vel_scs(k, j, i, XH, YH)
+                                + metric(XH, k, j, i, ZH) * grad_vel_scs(k, j, i, XH, ZH);
+
+        const auto grad_v_dot_a = metric(XH, k, j, i, XH) * grad_vel_scs(k, j, i, YH, XH)
+                                + metric(XH, k, j, i, YH) * grad_vel_scs(k, j, i, YH, YH)
+                                + metric(XH, k, j, i, ZH) * grad_vel_scs(k, j, i, YH, ZH);
+
+        const auto grad_w_dot_a = metric(XH, k, j, i, XH) * grad_vel_scs(k, j, i, ZH, XH)
+                                + metric(XH, k, j, i, YH) * grad_vel_scs(k, j, i, ZH, YH)
+                                + metric(XH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH, ZH);
+
+        integrand(k, j, i, XH) = grad_u_dot_a - mdot(XH, k, j, i) * vel_scs(k, j, i, XH);
+        integrand(k, j, i, YH) = grad_v_dot_a - mdot(XH, k, j, i) * vel_scs(k, j, i, YH);
+        integrand(k, j, i, ZH) = grad_w_dot_a - mdot(XH, k, j, i) * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_xhat(integrand, rhs);
+
+  ops.scs_yhat_grad(delta, grad_vel_scs);
+  ops.scs_yhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < nscs; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const auto grad_u_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, XH, XH)
+                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, XH, YH)
+                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, XH, ZH);
+
+        const auto grad_v_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, YH, XH)
+                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, YH, YH)
+                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, YH, ZH);
+
+        const auto grad_w_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, ZH, XH)
+                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, ZH, YH)
+                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH, ZH);
+
+        integrand(k, j, i, XH) = grad_u_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, XH);
+        integrand(k, j, i, YH) = grad_v_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, YH);
+        integrand(k, j, i, ZH) = grad_w_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_yhat(integrand, rhs);
+
+  ops.scs_zhat_grad(delta, grad_vel_scs);
+  ops.scs_zhat_interp(delta, vel_scs);
+  for (int k = 0; k < nscs; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const auto grad_u_dot_a = metric(ZH, k, j, i, XH) * grad_vel_scs(k, j, i, XH, XH)
+                                + metric(ZH, k, j, i, YH) * grad_vel_scs(k, j, i, XH, YH)
+                                + metric(ZH, k, j, i, ZH) * grad_vel_scs(k, j, i, XH, ZH);
+
+        const auto grad_v_dot_a = metric(ZH, k, j, i, XH) * grad_vel_scs(k, j, i, YH, XH)
+                                + metric(ZH, k, j, i, YH) * grad_vel_scs(k, j, i, YH, YH)
+                                + metric(ZH, k, j, i, ZH) * grad_vel_scs(k, j, i, YH, ZH);
+
+        const auto grad_w_dot_a = metric(ZH, k, j, i, XH) * grad_vel_scs(k, j, i, ZH, XH)
+                                + metric(ZH, k, j, i, YH) * grad_vel_scs(k, j, i, ZH, YH)
+                                + metric(ZH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH, ZH);
+
+        integrand(k, j, i, XH) = grad_u_dot_a - mdot(ZH, k, j, i) * vel_scs(k, j, i, XH);
+        integrand(k, j, i, YH) = grad_v_dot_a - mdot(ZH, k, j, i) * vel_scs(k, j, i, YH);
+        integrand(k, j, i, ZH) = grad_w_dot_a - mdot(ZH, k, j, i) * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_zhat(integrand, rhs);
+}
+
+template <int poly_order, typename Scalar>
+void split_momentum_advdiff_rhs(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const scs_vector_view<poly_order, Scalar>& metric,
+  const scs_scalar_view<poly_order, Scalar>& mdot,
+  const nodal_scalar_view<poly_order, Scalar>& delta,
+  nodal_scalar_view<poly_order, Scalar>& rhs)
+{
+  // linearized, dimensionally-split rhs
+
+  constexpr int n1D = poly_order + 1;
+  constexpr int nscs = poly_order;
+
+  nodal_scalar_workview<poly_order, Scalar> work_integrand(0);
+  auto& integrand = work_integrand.view();
+
+  nodal_scalar_workview<poly_order, Scalar> work_vel_scs(0);
+  auto& vel_scs = work_vel_scs.view();
+
+  nodal_vector_workview<poly_order,Scalar> work_grad_u(0);
+  auto& grad_vel_scs = work_grad_u.view();
+
+  ops.scs_xhat_grad(delta, grad_vel_scs);
+  ops.scs_xhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < nscs; ++i) {
+        const auto grad_u_dot_a = metric(XH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(XH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(XH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH);
+
+        integrand(k, j, i) = grad_u_dot_a - mdot(XH, k, j, i) * vel_scs(k, j, i);
+      }
+    }
+  }
+  ops.integrate_and_diff_xhat(integrand, rhs);
+
+  ops.scs_yhat_grad(delta, grad_vel_scs);
+  ops.scs_yhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < nscs; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const auto grad_u_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH);
+
+        integrand(k, j, i) = grad_u_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i);
+      }
+    }
+  }
+  ops.integrate_and_diff_yhat(integrand, rhs);
+
+  ops.scs_zhat_grad(delta, grad_vel_scs);
+  ops.scs_zhat_interp(delta, vel_scs);
+  for (int k = 0; k < nscs; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const auto grad_u_dot_a = metric(ZH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(ZH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(ZH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH);
+
+
+        integrand(k, j, i) = grad_u_dot_a - mdot(ZH, k, j, i) * vel_scs(k, j, i);
       }
     }
   }

@@ -66,6 +66,14 @@
 // bc kernels
 #include <kernel/ScalarFluxPenaltyElemKernel.h>
 
+#include "TpetraLinearSystem.h"
+#include "ConductionInteriorOperator.h"
+#include "MatrixFreeOperator.h"
+#include "TpetraMatrixFreeSolver.h"
+#include "MatrixFreeTypes.h"
+#include "tpetra_linsys/TpetraMeshManager.h"
+#include "ConductionDiagonal.h"
+
 // user functions
 #include <user_functions/SteadyThermalContactAuxFunction.h>
 #include <user_functions/SteadyThermalContactSrcNodeSuppAlg.h>
@@ -86,6 +94,7 @@
 // stk_mesh/base/fem
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Field.hpp>
+#include <stk_mesh/base/FieldBLAS.hpp>
 #include <stk_mesh/base/FieldParallel.hpp>
 #include <stk_mesh/base/GetBuckets.hpp>
 #include <stk_mesh/base/GetEntities.hpp>
@@ -93,6 +102,10 @@
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/SkinMesh.hpp>
 #include <stk_mesh/base/Comm.hpp>
+
+#include "ConductionInteriorOperator.h"
+#include "MatrixFreeOperator.h"
+#include "TpetraMatrixFreeSolver.h"
 
 // stk_io
 #include <stk_io/IossBridge.hpp>
@@ -300,7 +313,6 @@ void
 HeatCondEquationSystem::register_interior_algorithm(
   stk::mesh::Part *part)
 {
-
   // types of algorithms
   const AlgorithmType algType = INTERIOR;
 
@@ -326,6 +338,8 @@ HeatCondEquationSystem::register_interior_algorithm(
       it->second->partVec_.push_back(part);
     }
   }
+  if (doMatrixFree) return;
+
 
   // solver; interior edge/element contribution (diffusion)
   if ( !realm_.solutionOptions_->useConsolidatedSolverAlg_ ) {
@@ -919,7 +933,13 @@ HeatCondEquationSystem::register_overset_bc()
 void
 HeatCondEquationSystem::initialize()
 {
-  solverAlgDriver_->initialize_connectivity();
+  if (!doMatrixFree) {
+    solverAlgDriver_->initialize_connectivity();
+  }
+  else{
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
+    tpetralinsys.buildNodeGraph(realm_.interiorPartVec_);
+  }
   linsys_->finalizeLinearSystem();
 }
 
@@ -975,30 +995,92 @@ HeatCondEquationSystem::solve_and_update()
   }
 
   for ( int k = 0; k < maxIterations_; ++k ) {
-
     NaluEnv::self().naluOutputP0() << " " << k+1 << "/" << maxIterations_
                     << std::setw(15) << std::right << userSuppliedName_ << std::endl;
-    
-    // heat conduction assemble, load_complete and solve
-    assemble_and_solve(tTmp_);
 
-    // update
-    double timeA = NaluEnv::self().nalu_time();
-    field_axpby(
-      realm_.meta_data(),
-      realm_.bulk_data(),
-      1.0, *tTmp_,
-      1.0, *temperature_, 
-      realm_.get_activate_aura());
-    double timeB = NaluEnv::self().nalu_time();
-    timerAssemble_ += (timeB-timeA);
-   
+    constexpr int ndof = 1;
+    if (doMatrixFree) {
+      using interior_operator = ConductionInteriorOperator<p>;
+      auto selector  = stk::mesh::selectUnion(realm_.interiorPartVec_);
+
+      auto& bulk = realm_.bulk_data();
+      auto& meta = realm_.meta_data();
+      auto* tpetralinsys = dynamic_cast<TpetraLinearSystem*>(linsys_);
+      auto entToLid = tpetralinsys->entityToLID_;
+      std::cout << "------------- (interior)" << std::endl;
+      auto mfInterior = interior_operator(bulk, selector, *coordinates_, *density_, *thermalCond_, entToLid);
+      mfInterior.set_gamma({{
+        realm_.get_gamma1()/realm_.get_time_step(),
+        realm_.get_gamma2()/realm_.get_time_step(),
+        realm_.get_gamma3()/realm_.get_time_step()
+      }});
+//      mfInterior.set_gamma({{0, 0, 0}});
+
+      auto mfBdry = NoOperator();
+      using mfop_type = MFOperatorParallel<decltype(mfInterior), decltype(mfBdry)>;
+      auto mfOp = make_rcp<mfop_type>(
+          mfInterior,
+          mfBdry,
+          tpetralinsys->maxOwnedRowId_,
+          tpetralinsys->maxSharedNotOwnedRowId_,
+          tpetralinsys->ownedRowsMap_,
+          tpetralinsys->sharedNotOwnedRowsMap_,
+          tpetralinsys->sharedAndOwnedRowsMap_,
+          1
+      );
+
+
+      MatrixFreeProblem mfProb(mfOp, ndof);
+      auto sln = mfProb.sln;
+      auto rhs = mfProb.rhs;
+
+      TpetraMatrixFreeSolver solver(ndof);
+      mfOp->compute_rhs(*rhs);
+//      {
+//        auto diag = ConductionInteriorDiagonal<p>(bulk, selector, *tpetralinsys, *coordinates_, *density_, *thermalCond_);
+//        diag.set_gamma(0.);
+//        tpetralinsys->zeroSystem();
+//        diag.compute_diagonal();
+//        tpetralinsys->loadComplete();
+//        solver.create_ifpack2_preconditioner(tpetralinsys->ownedMatrix_);
+//      }
+      solver.create_problem(mfProb);
+      solver.set_tolerance(1.0e-2);
+      solver.set_max_iteration_count(100);
+      solver.create_solver();
+      solver.solve();
+      write_solution_to_field(bulk, selector, entToLid, sln->getLocalView<HostSpace>(), *tTmp_);
+      if (realm_.hasPeriodic_) {
+        realm_.periodic_delta_solution_update(tTmp_, linsys_->numDof());
+      }
+      stk::mesh::field_axpy(1.0, *tTmp_, *temperature_);
+
+      update_solution(bulk, selector, entToLid, sln->getLocalView<HostSpace>(), *tTmp_, *temperature_);
+      return;
+    }
+    else {
+
+      // heat conduction assemble, load_complete and solve
+      assemble_and_solve(tTmp_);
+
+      // update
+      double timeA = NaluEnv::self().nalu_time();
+      field_axpby(
+        realm_.meta_data(),
+        realm_.bulk_data(),
+        1.0, *tTmp_,
+        1.0, *temperature_,
+        realm_.get_activate_aura());
+      double timeB = NaluEnv::self().nalu_time();
+      timerAssemble_ += (timeB-timeA);
+    }
+
     // projected nodal gradient
-    timeA = NaluEnv::self().nalu_time();
+    double timeA = NaluEnv::self().nalu_time();
     compute_projected_nodal_gradient();
-    timeB = NaluEnv::self().nalu_time();
+    double timeB = NaluEnv::self().nalu_time();
     timerMisc_ += (timeB-timeA);
-  }  
+  }
 }
 
 //--------------------------------------------------------------------------

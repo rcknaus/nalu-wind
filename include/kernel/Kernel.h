@@ -218,6 +218,7 @@ private:
   Kernel* kernel_{nullptr};
 };
 
+
 }  // nalu
 }  // sierra
 

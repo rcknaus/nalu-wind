@@ -39,10 +39,15 @@ class SurfaceForceAndMomentAlgorithmDriver;
  *  between the velocity and the pressure Possion solves in the
  *  LowMachEquationSystem::solve_and_update method.
  */
+
+struct MF {
+  static constexpr bool doMatrixFree = true;
+  static constexpr int p = 1;
+};
+
 class LowMachEquationSystem : public EquationSystem {
 
 public:
-
   LowMachEquationSystem (
     EquationSystems& equationSystems,
     const bool elementContinuityEqs);
@@ -62,6 +67,11 @@ public:
 
   virtual void register_interior_algorithm(
     stk::mesh::Part *part);
+
+  virtual void register_inflow_bc(
+    stk::mesh::Part *part,
+    const stk::topology &theTopo,
+    const InflowBoundaryConditionData &inflowBCData);
 
   virtual void register_open_bc(
     stk::mesh::Part *part,
@@ -110,7 +120,6 @@ public:
 class MomentumEquationSystem : public EquationSystem {
 
 public:
-
   MomentumEquationSystem(
     EquationSystems& equationSystems);
   virtual ~MomentumEquationSystem();
@@ -196,6 +205,8 @@ public:
   const bool managePNG_;
 
   VectorFieldType *velocity_;
+  VectorFieldType *provisionalVelocity_;
+
   GenericFieldType *dudx_;
 
   VectorFieldType *coordinates_;
@@ -218,12 +229,12 @@ public:
 
   // saved of mesh parts that are not to be projected
   std::vector<stk::mesh::Part *> notProjectedPart_;
+
 };
 
 class ContinuityEquationSystem : public EquationSystem {
 
 public:
-
   ContinuityEquationSystem(
     EquationSystems& equationSystems,
     const bool elementContinuityEqs);
@@ -290,7 +301,9 @@ public:
   const bool elementContinuityEqs_;
   const bool managePNG_;
   ScalarFieldType *pressure_;
+  ScalarFieldType *provisionalPressure_;
   VectorFieldType *dpdx_;
+  VectorFieldType *provisionalDpdx_;
   ScalarFieldType *massFlowRate_;
   VectorFieldType *coordinates_;
 
