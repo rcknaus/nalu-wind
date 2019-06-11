@@ -42,7 +42,7 @@ class SurfaceForceAndMomentAlgorithmDriver;
 
 struct MF {
   static constexpr bool doMatrixFree = true;
-  static constexpr int p = 1;
+  static constexpr int p = 4;
 };
 
 class LowMachEquationSystem : public EquationSystem {
