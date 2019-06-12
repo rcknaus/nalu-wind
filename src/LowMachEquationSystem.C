@@ -991,7 +991,6 @@ LowMachEquationSystem::solve_and_update()
                     << std::setw(15) << std::right << userSuppliedName_ << std::endl;
 
     // momentum assemble, load_complete and solve
-
     if(!MF::doMatrixFree) {
       momentumEqSys_->assemble_and_solve(momentumEqSys_->uTmp_);
     }
@@ -999,17 +998,17 @@ LowMachEquationSystem::solve_and_update()
       timeA = NaluEnv::self().nalu_time();
       momSolv.assemble();
       timeB = NaluEnv::self().nalu_time();
-      momentumEqSys_->timerAssemble_ += (timeB-timeA);
+      momentumEqSys_->timerAssemble_ += (timeB - timeA);
 
       timeA = NaluEnv::self().nalu_time();
       momSolv.solve();
       timeB = NaluEnv::self().nalu_time();
-      momentumEqSys_->timerSolve_ += (timeB-timeA);
+      momentumEqSys_->timerSolve_ += (timeB - timeA);
 
       timeA = NaluEnv::self().nalu_time();
       momSolv.update_solution();
       timeB = NaluEnv::self().nalu_time();
-      momentumEqSys_->timerAssemble_ += (timeB-timeA);
+      momentumEqSys_->timerAssemble_ += (timeB - timeA);
 
       std::cout << "momentum it count: " << momSolv.solver_->iteration_count() << std::endl;
     }
@@ -1022,7 +1021,7 @@ LowMachEquationSystem::solve_and_update()
       1.0, momentumEqSys_->velocity_->field_of_state(stk::mesh::StateNP1),
       realm_.get_activate_aura());
     timeB = NaluEnv::self().nalu_time();
-    momentumEqSys_->timerAssemble_ += (timeB-timeA);
+    momentumEqSys_->timerAssemble_ += (timeB - timeA);
 
     // compute velocity relative to mesh with new velocity
     realm_.compute_vrtm();
@@ -1032,7 +1031,7 @@ LowMachEquationSystem::solve_and_update()
       timeA = NaluEnv::self().nalu_time();
       continuityEqSys_->computeMdotAlgDriver_->execute();
       timeB = NaluEnv::self().nalu_time();
-      continuityEqSys_->timerMisc_ += (timeB-timeA);
+      continuityEqSys_->timerMisc_ += (timeB - timeA);
     }
 
     // continuity assemble, load_complete and solve
@@ -1043,20 +1042,19 @@ LowMachEquationSystem::solve_and_update()
       timeA = NaluEnv::self().nalu_time();
       contSolv.assemble();
       timeB = NaluEnv::self().nalu_time();
-      continuityEqSys_->timerAssemble_ += (timeB-timeA);
+      continuityEqSys_->timerAssemble_ += (timeB - timeA);
 
       timeA = NaluEnv::self().nalu_time();
       contSolv.solve();
       timeB = NaluEnv::self().nalu_time();
-      continuityEqSys_->timerSolve_ += (timeB-timeA);
+      continuityEqSys_->timerSolve_ += (timeB - timeA);
 
       timeA = NaluEnv::self().nalu_time();
       contSolv.update_solution();
       timeB = NaluEnv::self().nalu_time();
-      continuityEqSys_->timerAssemble_ += (timeB-timeA);
+      continuityEqSys_->timerAssemble_ += (timeB - timeA);
 
       std::cout << "continuity it count: " << contSolv.solver_->iteration_count() << std::endl;
-
     }
 
     // update pressure
