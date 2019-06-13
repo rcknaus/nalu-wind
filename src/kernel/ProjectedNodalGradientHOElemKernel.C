@@ -9,6 +9,7 @@
 #include <kernel/TensorProductCVFEMPNG.h>
 #include <master_element/TensorProductCVFEMVolumeMetric.h>
 #include <master_element/TensorProductCVFEMAdvectionMetric.h>
+#include "kernel/TensorProductCVFEMPNG.h"
 
 #include <element_promotion/ElementDescription.h>
 

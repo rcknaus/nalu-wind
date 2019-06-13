@@ -65,7 +65,7 @@ template <int p> struct ContinuityInteriorOperator {
     SharedViewType yshared) const
   {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         maxOwnedRowLid,
         maxSharedNotOwnedLid,
@@ -87,7 +87,7 @@ template <int p> struct ContinuityInteriorOperator {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
       auto delta = gather_delta<p>(index, entityOffsets_, xv);
       const auto delta_view = nodal_scalar_view<p, DoubleType>(delta.data());
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         maxOwnedRowLid,
         maxSharedNotOwnedLid,

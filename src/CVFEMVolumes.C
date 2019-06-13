@@ -18,35 +18,6 @@
 #include <stk_util/util/ReportHandler.hpp>
 
 namespace sierra { namespace nalu {
-namespace {
-
-int num_total_simd_elements(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
-{
-  int len = 0;
-  const auto& buckets = bulk.get_buckets(stk::topology::ELEMENT_RANK, selector);
-  auto policy = Kokkos::TeamPolicy<HostSpace>(buckets.size(), Kokkos::AUTO);
-  Kokkos::parallel_for(policy, [&len, buckets](const sierra::nalu::TeamHandleType& team)
-  {
-    const stk::mesh::Bucket& b = *buckets[team.league_rank()];
-    const size_t bucketLen = b.size();
-    const size_t simdBucketLen = get_num_simd_groups(bucketLen);
-    Kokkos::parallel_for(Kokkos::TeamThreadRange(team, simdBucketLen), [&len] (int e) { Kokkos::atomic_add(&len, 1); });
-  });
-  return len;
-}
-
-int field_bucket_index(int bktIndex, int simdElemIndex) { return bktIndex * stk::simd::ndoubles + simdElemIndex; }
-
-Kokkos::Array<stk::mesh::Entity, simdLen> load_simd_elems(const stk::mesh::Bucket& b, int bktIndex,  int numSimdElems)
-{
-  Kokkos::Array<stk::mesh::Entity, simdLen> simdElems;
-  for (int simdElemIndex = 0; simdElemIndex < numSimdElems; ++simdElemIndex) {
-    simdElems[simdElemIndex] = b[field_bucket_index(bktIndex, simdElemIndex)];
-  }
-  return simdElems;
-}
-
-}
 
 template <int p> ko::scalar_view<p> volumes(ko::vector_view<p> coordinates)
 {

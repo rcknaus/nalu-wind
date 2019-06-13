@@ -151,8 +151,7 @@ TEST(SparsifiedLaplacian, p2_has_one_sort)
         for (int j = 0; j < 8; ++j) {
           for (int i = 0; i < 8; ++i) {
             std::cout << lhs(n, m, l, j, i)[0] << " | ";
-
-//            EXPECT_DOUBLETYPE_EQ(individual_lhs(0, 0, 0, j, i), lhs(n, m, l, j, i));
+           EXPECT_DOUBLETYPE_EQ(individual_lhs(0, 0, 0, j, i), lhs(n, m, l, j, i));
           }
           std::cout << std::endl;
         }

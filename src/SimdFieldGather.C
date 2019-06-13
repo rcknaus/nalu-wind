@@ -104,7 +104,6 @@ template <int p> elem_entity_view_t<p> element_entity_view(
   const stk::mesh::BulkData& bulk,
   const stk::mesh::Selector& selector)
 {
-  const auto& meta = bulk.mesh_meta_data();
   auto perm = make_node_map_hex(p);
   const auto& buckets = bulk.get_buckets(stk::topology::ELEM_RANK, selector);
   elem_entity_view_t<p> entityElemView("elem_entity_row_map", num_simd_elements(buckets));
@@ -148,7 +147,6 @@ template <int p> void write_to_stk_field(
   ScalarFieldType& nodal_stk_field)
 {
   for (int index = 0; index < entToLID.extent_int(0); ++index) {
-    constexpr auto nNodes = (p + 1) * (p + 1) * (p + 1);
     for (int n = 0; n < simdLen && valid_index(entToLID(index,n,0,0,0)); ++n) {
       for (int k = 0; k < p + 1; ++k) {
         for (int j = 0; j < p + 1; ++j) {

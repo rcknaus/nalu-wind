@@ -39,7 +39,6 @@ template <int p> void MomentumInteriorDiagonal<p>::initialize(
       ->field_of_state(stk::mesh::StateNP1);
   volume_ = volumes<p>(gather_field<p>(bulk, selector, rhoField), coordview);
 
-
   const auto& viscField = meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "viscosity")
       ->field_of_state(stk::mesh::StateNone);
   mapped_area_ = mapped_areas<p>(gather_field<p>(bulk, selector, viscField), coordview);

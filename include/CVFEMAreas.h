@@ -1,5 +1,5 @@
-#ifndef CVFEMMAPPEDAREAS_H
-#define CVFEMMAPPEDAREAS_H
+#ifndef CVFEMAREAS_H
+#define CVFEMAREAS_H
 
 #include <CVFEMTypeDefs.h>
 #include <ElemDataRequests.h>

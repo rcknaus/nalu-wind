@@ -106,21 +106,6 @@ constexpr int default_mesh_size = 64;
 using TpetraOperator = Tpetra::Operator<double, local_ordinal_type, global_ordinal_type>;
 using TpetraVector = Tpetra::MultiVector<double, local_ordinal_type, global_ordinal_type>;
 
-namespace {
-
-void print_local_data(const TpetraVector& x, const TpetraVector& y)
-{
-  const auto x_view = x.getLocalView<HostSpace>();
-  const auto y_view = y.getLocalView<HostSpace>();
-  ThrowRequire(x_view.extent_int(0) == y_view.extent_int(0));
-  for (int k = 0; k < y_view.extent_int(0); ++k) {
-    std::cout << k << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ")" << std::endl;
-  }
-}
-
-
-} // namespace
-
 TEST_F(TpetraMatrixFreeFixture, check_matrix_free_laplacian_is_zero_for_constant_data)
 {
   constexpr int p = 1;
@@ -153,15 +138,6 @@ TEST_F(TpetraMatrixFreeFixture, check_matrix_free_laplacian_is_zero_for_constant
     ASSERT_DOUBLE_EQ(yv(k,0), 0);
   }
 }
-
-//unit_test_utils::NaluTest& naluObj, const std::string& meshSpec)
-//{
-//  sierra::nalu::Realm& realm = naluObj.create_realm();
-//  realm.setup_nodal_fields();
-//  unit_test_utils::fill_hex8_mesh(meshSpec, realm.bulk_data());
-//  realm.set_global_id();
-//  return realm;
-//}
 
 TEST_F(TpetraMatrixFreeFixture, solve_laplacian)
 {
@@ -240,7 +216,7 @@ TEST_F(TpetraMatrixFreeFixture, solve_laplacian)
 //  resid->update(-1.0, *rhs, 1.0);
 //  print_local_data(*solution, *resid);
   std::cout << "------------- (update)" << std::endl;
-  update_solution(bulk, meta.universal_part(), entToLid, sln->getLocalView<HostSpace>(), qTmpField, qField);
+  update_solution(bulk, meta.universal_part(), entToLid, sln->getLocalView<HostSpace>(), qTmpField);
   std::cout << "linear iterations: " << solver.iteration_count() << std::endl;
   io.process_output_request(fileId, 1.0);
 //  std::cout << "finito" << std::endl;

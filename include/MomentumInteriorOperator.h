@@ -68,44 +68,45 @@ template <int p> struct MomentumInteriorOperator {
 
   void update_element_views(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
   {
-    const auto bdf2 = solution_field(bulk).number_of_states() == 3;
-    velm1_ = gather_field<p>(bulk, selector,
-      solution_field(bulk).field_of_state((bdf2) ? stk::mesh::StateNM1 : stk::mesh::StateN));
-    velp0_ = gather_field<p>(bulk, selector, solution_field(bulk).field_of_state(stk::mesh::StateN));
-    velp1_ = predict_state(bulk, selector);
-
-    auto& meta = bulk.mesh_meta_data();
-    const auto& GpField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx");
-    Gp_ = gather_field<p>(bulk, selector, GpField.field_of_state(stk::mesh::StateNone));
-
-    const auto& pressField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure");
-    pressure_ = gather_field<p>(bulk, selector, pressField.field_of_state(stk::mesh::StateNone));
+    initialize(bulk, selector);
+//    const auto bdf2 = solution_field(bulk).number_of_states() == 3;
+//    velm1_ = gather_field<p>(bulk, selector,
+//      solution_field(bulk).field_of_state((bdf2) ? stk::mesh::StateNM1 : stk::mesh::StateN));
+//    velp0_ = gather_field<p>(bulk, selector, solution_field(bulk).field_of_state(stk::mesh::StateN));
+//    velp1_ = predict_state(bulk, selector);
+//
+//    auto& meta = bulk.mesh_meta_data();
+//    const auto& GpField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx");
+//    Gp_ = gather_field<p>(bulk, selector, GpField.field_of_state(stk::mesh::StateNone));
+//
+//    const auto& pressField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure");
+//    pressure_ = gather_field<p>(bulk, selector, pressField.field_of_state(stk::mesh::StateNone));
   }
 
-  void cycle_element_views(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
-  {
-    velm1_ = velp0_;
-    velp0_ = velp1_;
-    velp1_ = predict_state(bulk, selector);
-
-    auto& meta = bulk.mesh_meta_data();
-    const auto& GpField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx");
-    Gp_ = gather_field<p>(bulk, selector, GpField.field_of_state(stk::mesh::StateNone));
-
-    if (variableProp_) {
-      rhom1_ = rhop0_;
-      rhop0_ = rhop1_;
-      auto& rhoField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
-      rhop1_ = gather_field<p>(bulk, selector, rhoField.field_of_state(stk::mesh::StateNP1));
-
-      // fixme: needs to change for LES
-      const auto& viscField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "viscosity");
-      visc_ = gather_field<p>(bulk, selector, viscField.field_of_state(stk::mesh::StateNone));
-
-      scaled_volume_ = volumes<p>(rhop1_, coords_);
-      mapped_area_ = mapped_areas<p>(visc_, coords_);
-    }
-  }
+//  void cycle_element_views(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
+//  {
+//    velm1_ = velp0_;
+//    velp0_ = velp1_;
+//    velp1_ = predict_state(bulk, selector);
+//
+//    auto& meta = bulk.mesh_meta_data();
+//    const auto& GpField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx");
+//    Gp_ = gather_field<p>(bulk, selector, GpField.field_of_state(stk::mesh::StateNone));
+//
+//    if (variableProp_) {
+//      rhom1_ = rhop0_;
+//      rhop0_ = rhop1_;
+//      auto& rhoField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
+//      rhop1_ = gather_field<p>(bulk, selector, rhoField.field_of_state(stk::mesh::StateNP1));
+//
+//      // fixme: needs to change for LES
+//      const auto& viscField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "viscosity");
+//      visc_ = gather_field<p>(bulk, selector, viscField.field_of_state(stk::mesh::StateNone));
+//
+//      scaled_volume_ = volumes<p>(rhop1_, coords_);
+//      mapped_area_ = mapped_areas<p>(visc_, coords_);
+//    }
+//  }
 
   void compute_mdot(double projTimeScale)
   {
@@ -121,7 +122,7 @@ template <int p> struct MomentumInteriorOperator {
     SharedViewType yshared) const
   {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         maxOwnedRowLid,
         maxSharedNotOwnedLid,
@@ -145,7 +146,7 @@ template <int p> struct MomentumInteriorOperator {
       for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
         auto delta = gather_vector_delta<p>(index, entityOffsets_, xv);
         const auto delta_view = nodal_vector_view<p, DoubleType>(delta.data());
-        add_local_rhs_to_global_tpetra_vector<p>(
+        add_element_rhs_to_local_tpetra_vector<p>(
           index,
           maxOwnedRowLid,
           maxSharedNotOwnedLid,
@@ -160,7 +161,7 @@ template <int p> struct MomentumInteriorOperator {
       for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
         auto delta = gather_delta<p>(index, entityOffsets_, xv);
         const auto delta_view = nodal_scalar_view<p, DoubleType>(delta.data());
-        add_local_rhs_to_global_tpetra_vector<p>(
+        add_element_rhs_to_local_tpetra_vector<p>(
           index,
           maxOwnedRowLid,
           maxSharedNotOwnedLid,

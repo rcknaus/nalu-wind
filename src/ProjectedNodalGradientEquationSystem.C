@@ -28,6 +28,17 @@
 #include <kernel/KernelBuilder.h>
 #include <kernel/ProjectedNodalGradientHOElemKernel.h>
 
+#include "ProjectedNodalGradientInteriorOperator.h"
+#include "TpetraLinearSystem.h"
+#include "MatrixFreeOperator.h"
+#include "TpetraMatrixFreeSolver.h"
+#include "MatrixFreeTypes.h"
+#include "tpetra_linsys/TpetraMeshManager.h"
+#include "ConductionInteriorOperator.h"
+#include "ProjectedNodalGradientInteriorOperator.h"
+#include "SparsifiedLaplacian.h"
+#include "MassDiagonal.h"
+
 // user functions
 #include <user_functions/SteadyThermalContactAuxFunction.h>
 
@@ -331,6 +342,13 @@ ProjectedNodalGradientEquationSystem::register_overset_bc()
 void
 ProjectedNodalGradientEquationSystem::initialize()
 {
+
+  if (MF::doMatrixFree) {
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
+    tpetralinsys.buildSparsifiedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
+    linsys_->finalizeLinearSystem();
+    return;
+  }
   solverAlgDriver_->initialize_connectivity();
   linsys_->finalizeLinearSystem();
 }
@@ -376,16 +394,119 @@ ProjectedNodalGradientEquationSystem::solve_and_update()
     solve_and_update_external();
 }
 
-//--------------------------------------------------------------------------
-//-------- solve_and_update_external ---------------------------------------
-//--------------------------------------------------------------------------
+class PNGSolver {
+public:
+  using mfop_type = MFOperatorParallel<ProjectedNodalGradientInteriorOperator<MF::p>, NoOperator>;
+
+  static constexpr bool precondition = true;
+
+  PNGSolver(ProjectedNodalGradientEquationSystem& eqSys) : eqSys_(eqSys) {}
+
+  void create()
+  {
+    auto& realm = eqSys_.realm_;
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(eqSys_.linsys_);
+    auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
+    auto& bulk = realm.bulk_data();
+    auto& meta = realm.meta_data();
+    auto entToLid = tpetralinsys.entityToLID_;
+
+    auto& coordField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK,  "coordinates");
+    mfInterior_ = make_rcp<ProjectedNodalGradientInteriorOperator<MF::p>>(bulk, selector, coordField, entToLid);
+    mfBdry_ = make_rcp<NoOperator>();
+
+    mfOp_ = make_rcp<mfop_type>(
+      *mfInterior_,
+      *mfBdry_,
+      tpetralinsys.maxOwnedRowId_,
+      tpetralinsys.maxSharedNotOwnedRowId_,
+      tpetralinsys.ownedRowsMap_,
+      tpetralinsys.sharedNotOwnedRowsMap_,
+      tpetralinsys.sharedAndOwnedRowsMap_,
+      1
+    );
+    mfProb_ = make_rcp<MatrixFreeProblem>(mfOp_, 1);
+    auto sln = mfProb_->sln;
+    auto rhs = mfProb_->rhs;
+    solver_ = make_rcp<TpetraMatrixFreeSolver>(1);
+    if (precondition) {
+      mfMass_ = make_rcp<MassInteriorDiagonal<MF::p>>(bulk, selector, tpetralinsys, coordField);
+      tpetralinsys.zeroSystem();
+      mfMass_->compute_diagonal();
+      tpetralinsys.loadComplete();
+      auto coordMV = make_rcp<mv_type>(sln->getMap(), 3);
+      tpetralinsys.copy_stk_to_tpetra(&coordField, coordMV);
+      solver_->create_muelu_preconditioner(tpetralinsys.ownedMatrix_, coordMV);
+    }
+    solver_->create_problem(*mfProb_);
+    solver_->set_tolerance(1.0e-4);
+    solver_->set_max_iteration_count(100);
+    solver_->create_solver();
+  }
+
+  void assemble()
+  {
+    auto& realm = eqSys_.realm_;
+    auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
+    auto& bulk = realm.bulk_data();
+
+    const auto& qField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK, eqSys_.dofName_);
+    mfInterior_->initialize(bulk, selector, qField, *eqSys_.dqdx_);
+    mfOp_->compute_rhs(*mfProb_->rhs);
+  }
+
+  void solve()
+  {
+    solver_->solve();
+  }
+
+  void update_solution()
+  {
+    auto& realm = eqSys_.realm_;
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(eqSys_.linsys_);
+    auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
+    auto& bulk = realm.bulk_data();
+    auto entToLid = tpetralinsys.entityToLID_;
+
+    write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), *eqSys_.qTmp_);
+    if (realm.hasPeriodic_) {
+      realm.periodic_delta_solution_update(eqSys_.qTmp_, 1);
+    }
+  }
+  ProjectedNodalGradientEquationSystem& eqSys_;
+  Teuchos::RCP<ProjectedNodalGradientInteriorOperator<MF::p>> mfInterior_;
+  Teuchos::RCP<NoOperator> mfBdry_;
+  Teuchos::RCP<MassInteriorDiagonal<MF::p>> mfMass_;
+  Teuchos::RCP<MatrixFreeProblem> mfProb_;
+  Teuchos::RCP<mfop_type> mfOp_;
+  Teuchos::RCP<TpetraMatrixFreeSolver> solver_;
+};
+
+
 void
 ProjectedNodalGradientEquationSystem::solve_and_update_external()
 {
+  double timeA, timeB;
+  static PNGSolver mfSolver(*this);
+  if (isInit_) {
+    mfSolver.create();
+  }
+
   for ( int k = 0; k < maxIterations_; ++k ) {
 
     // projected nodal gradient, load_complete and solve
-    assemble_and_solve(qTmp_);
+    if(!MF::doMatrixFree) {
+      assemble_and_solve(qTmp_);
+    }
+    else {
+
+      timeA = NaluEnv::self().nalu_time();
+      mfSolver.assemble();
+      timeB
+      mfSolver().
+
+    }
+
 
     // update
     double timeA = NaluEnv::self().nalu_time();

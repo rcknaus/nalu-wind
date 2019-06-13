@@ -109,7 +109,7 @@ nodal_scalar_array<DoubleType, p> residual_guess(
 
 
 template <int p, typename TpetraVectorViewType>
-void add_local_rhs_to_global_tpetra_vector(
+void add_element_rhs_to_local_tpetra_vector(
   int index, const elem_ordinal_view_t<p>& entToLID,
   const LocalArray<DoubleType[p+1][p+1][p+1]>& simdrhs,
   TpetraVectorViewType& yout)
@@ -127,7 +127,7 @@ void add_local_rhs_to_global_tpetra_vector(
 }
 
 template <int p, typename TpetraVectorViewType>
-void add_local_rhs_to_global_tpetra_vector(
+void add_element_rhs_to_local_tpetra_vector(
   int index,
   global_ordinal_type maxOwnedLID,
   global_ordinal_type maxSharedNotOwnedLid,
@@ -136,8 +136,6 @@ void add_local_rhs_to_global_tpetra_vector(
   TpetraVectorViewType& yOwned,
   TpetraVectorViewType& yShared)
 {
-  static constexpr bool forceAtomic = !std::is_same<sierra::nalu::DeviceSpace, Kokkos::Serial>::value;
-
   static constexpr int n1D = p + 1;
   for (int n = 0; n < simdLen && valid_index(entToLID(index,n,0,0,0)); ++n) {
     for (int k = 0; k < n1D; ++k) {
@@ -157,7 +155,7 @@ void add_local_rhs_to_global_tpetra_vector(
 }
 
 template <int p, typename TpetraVectorViewType>
-void add_local_rhs_to_global_tpetra_vector(
+void add_element_rhs_to_local_tpetra_vector(
   int index,
   global_ordinal_type maxOwnedLID,
   global_ordinal_type maxSharedNotOwnedLid,
@@ -166,8 +164,6 @@ void add_local_rhs_to_global_tpetra_vector(
   TpetraVectorViewType& yOwned,
   TpetraVectorViewType& yShared)
 {
-  static constexpr bool forceAtomic = !std::is_same<sierra::nalu::DeviceSpace, Kokkos::Serial>::value;
-
   static constexpr int n1D = p + 1;
   for (int n = 0; n < simdLen && valid_index(entToLID(index,n,0,0,0)); ++n) {
     for (int k = 0; k < n1D; ++k) {
@@ -247,25 +243,6 @@ void write_solution_to_field(
 }
 
 
-template <typename TpetraViewType>
-void update_solution(
-  const stk::mesh::BulkData& bulk,
-  const stk::mesh::Selector& activeSelector,
-  Kokkos::View<int*> nodeEntToLID,
-  const TpetraViewType& xv,
-  ScalarFieldType& tmpField,
-  ScalarFieldType& qField)
-{
-  auto active_locally_owned = activeSelector & bulk.mesh_meta_data().locally_owned_part();
-
-  const auto& buckets = bulk.get_buckets(stk::topology::NODE_RANK, active_locally_owned);
-  for (const auto* ib : buckets) {
-    for (const auto node : *ib) {
-      *stk::mesh::field_data(qField, node) -= xv(nodeEntToLID(node.local_offset()), 0);
-    }
-  }
-  stk::mesh::copy_owned_to_shared(bulk, {&qField});
-}
 
 } // namespace nalu
 } // namespace Sierra

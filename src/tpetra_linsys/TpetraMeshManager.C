@@ -158,7 +158,7 @@ stk::mesh::Entity get_entity_from_id(const stk::mesh::BulkData& bulk, global_ord
 
 Kokkos::View<local_ordinal_type*> entity_offset_to_row_lid_map(
   const stk::mesh::BulkData& bulk,
-  const GlobalIdFieldType& gidField,
+  const GlobalIdFieldType& /*gidField*/,
   const SolutionPointCategorizer& cat,
   const stk::mesh::Selector& selector,
   const std::unordered_map<global_ordinal_type, global_ordinal_type>& localIdToGlobalIdMap)

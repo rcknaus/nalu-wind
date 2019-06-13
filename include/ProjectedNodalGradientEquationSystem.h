@@ -13,6 +13,7 @@
 #include <EquationSystem.h>
 #include <FieldTypeDef.h>
 #include <NaluParsing.h>
+#include "MatrixFreeTraits.h"
 
 #include <stk_mesh/base/FieldBase.hpp>
 #include <stk_mesh/base/CoordinateSystems.hpp>
@@ -109,6 +110,8 @@ public:
   // internal fields
   VectorFieldType *dqdx_;
   VectorFieldType *qTmp_;  
+
+  bool isInit_;
 };
 
 } // namespace nalu

@@ -437,10 +437,6 @@ void TpetraLinearSystem::buildSparsifiedElemToNodeGraph(const stk::mesh::Selecto
 
   const int poly_order = (realm_.promotionOrder_ == 0) ? 1: realm_.promotionOrder_ ;
   auto node_map = make_node_map_hex(poly_order);
-  const auto* node_map_ptr = node_map.data();
-
-  static constexpr int perm[8] = {0,1,3,2,4,5,7,6};
-
   stk::mesh::BucketVector const& buckets = realm_.get_buckets( stk::topology::ELEMENT_RANK, s_owned);
   std::vector<stk::mesh::Entity> entities(8);
   for (const auto* ib : buckets) {
@@ -450,16 +446,6 @@ void TpetraLinearSystem::buildSparsifiedElemToNodeGraph(const stk::mesh::Selecto
       for (int n = 0; n < poly_order; ++n) {
         for (int m = 0; m < poly_order; ++m) {
           for (int l = 0; l < poly_order; ++l) {
-            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
-            entities[1] = elem_nodes[node_map(n+0,m+0,l+1)];
-            entities[2] = elem_nodes[node_map(n+0,m+1,l+1)];
-            entities[3] = elem_nodes[node_map(n+0,m+1,l+0)];
-
-            entities[4] = elem_nodes[node_map(n+1,m+0,l+0)];
-            entities[5] = elem_nodes[node_map(n+1,m+0,l+1)];
-            entities[6] = elem_nodes[node_map(n+1,m+1,l+1)];
-            entities[7] = elem_nodes[node_map(n+1,m+1,l+0)];
-
             entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
             entities[1] = elem_nodes[node_map(n+0,m+0,l+1)];
             entities[2] = elem_nodes[node_map(n+0,m+1,l+1)];

@@ -1004,7 +1004,6 @@ HeatCondEquationSystem::solve_and_update()
       auto selector  = stk::mesh::selectUnion(realm_.interiorPartVec_);
 
       auto& bulk = realm_.bulk_data();
-      auto& meta = realm_.meta_data();
       auto* tpetralinsys = dynamic_cast<TpetraLinearSystem*>(linsys_);
       auto entToLid = tpetralinsys->entityToLID_;
       std::cout << "------------- (interior)" << std::endl;
@@ -1055,13 +1054,14 @@ HeatCondEquationSystem::solve_and_update()
       }
       stk::mesh::field_axpy(1.0, *tTmp_, *temperature_);
 
-      update_solution(bulk, selector, entToLid, sln->getLocalView<HostSpace>(), *tTmp_, *temperature_);
+      update_solution(bulk, selector, entToLid, sln->getLocalView<HostSpace>(), *tTmp_);
       return;
     }
     else {
 
       // heat conduction assemble, load_complete and solve
       assemble_and_solve(tTmp_);
+    }
 
       // update
       double timeA = NaluEnv::self().nalu_time();
@@ -1073,12 +1073,11 @@ HeatCondEquationSystem::solve_and_update()
         realm_.get_activate_aura());
       double timeB = NaluEnv::self().nalu_time();
       timerAssemble_ += (timeB-timeA);
-    }
 
     // projected nodal gradient
-    double timeA = NaluEnv::self().nalu_time();
+    timeA = NaluEnv::self().nalu_time();
     compute_projected_nodal_gradient();
-    double timeB = NaluEnv::self().nalu_time();
+   timeB = NaluEnv::self().nalu_time();
     timerMisc_ += (timeB-timeA);
   }
 }

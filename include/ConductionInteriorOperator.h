@@ -84,7 +84,7 @@ template <int p> struct ConductionInteriorOperator {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
       auto delta = gather_delta<p>(index, entityOffsets_, xv);
       const auto delta_view = nodal_scalar_view<p, DoubleType>(delta.data());
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         entityOffsets_,
         op::linearized_residual(index, projTimeScale_[0], volume_, mapped_area_, delta_view),
@@ -96,7 +96,7 @@ template <int p> struct ConductionInteriorOperator {
   template <typename TpetraViewType> void compute_rhs(TpetraViewType& yv) const
   {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         entityOffsets_,
         op::residual(index, projTimeScale_, volume_, mapped_area_, qm1_, qp0_, qp1_),
@@ -112,7 +112,7 @@ template <int p> struct ConductionInteriorOperator {
     SharedViewType yshared) const
   {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         maxOwnedRowLid,
         maxSharedNotOwnedLid,
@@ -134,7 +134,7 @@ template <int p> struct ConductionInteriorOperator {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
       auto delta = gather_delta<p>(index, entityOffsets_, xv);
       const auto delta_view = nodal_scalar_view<p, DoubleType>(delta.data());
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         maxOwnedRowLid,
         maxSharedNotOwnedLid,
@@ -149,7 +149,7 @@ template <int p> struct ConductionInteriorOperator {
   template <typename TpetraViewType> void compute_matrix_diagonal(TpetraViewType& yv) const
   {
     for (int index = 0; index < entityOffsets_.extent_int(0); ++index) {
-      add_local_rhs_to_global_tpetra_vector<p>(
+      add_element_rhs_to_local_tpetra_vector<p>(
         index,
         entityOffsets_,
         op::lhs_diagonal(index, projTimeScale_[0], volume_, mapped_area_),

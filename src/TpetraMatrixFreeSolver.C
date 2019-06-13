@@ -65,7 +65,7 @@ TpetraMatrixFreeSolver::TpetraMatrixFreeSolver(int ndim) : ndim_(ndim)
 
   auto precondParams = make_rcp<Teuchos::ParameterList>();
   precondParams->set("relaxation: type", "Jacobi");
-  precondParams->set("relaxation: sweeps", 1);
+  precondParams->set("relaxation: sweeps", 3);
   set_preconditioner_params(precondParams);
 }
 
@@ -86,6 +86,8 @@ void TpetraMatrixFreeSolver::create_muelu_preconditioner(Teuchos::RCP<matrix_typ
   using lo = local_ordinal_type;
   using go = global_ordinal_type;
   auto params = make_rcp<Teuchos::ParameterList>();
+
+  params->set("xml parameter file", "milestone.xml");
 
   ThrowRequire(coords != Teuchos::null);
   auto& userParamList = params->sublist("user data");
@@ -132,9 +134,6 @@ void TpetraMatrixFreeSolver::solve()
   if (ifpack2Precond_ != Teuchos::null) {
     ifpack2Precond_->compute();
   }
-  else if (mueluPrecond_ != Teuchos::null){
-//    mueluPrecond_->compute();
-  }
   prob_->setProblem();
 //  std::cout << "xlen: " <<prob_->getLHS()->getNumVectors() << ", ylen: "<< prob_->getRHS()->getNumVectors()  << std::endl;
 
@@ -178,7 +177,7 @@ double TpetraMatrixFreeSolver::scaled_linear_residual()
 //    rhs_mag += norm*norm;
 //  }
 //  return resid_mag / rhs_mag;
-//  return 1;
+  return 1;
 }
 
 } // namespace nalu

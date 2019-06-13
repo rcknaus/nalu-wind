@@ -12,6 +12,8 @@
 #include <EquationSystem.h>
 #include <FieldTypeDef.h>
 #include <NaluParsing.h>
+#include "MatrixFreeTraits.h"
+
 
 namespace stk{
 struct topology;
@@ -40,10 +42,6 @@ class SurfaceForceAndMomentAlgorithmDriver;
  *  LowMachEquationSystem::solve_and_update method.
  */
 
-struct MF {
-  static constexpr bool doMatrixFree = true;
-  static constexpr int p = 4;
-};
 
 class LowMachEquationSystem : public EquationSystem {
 

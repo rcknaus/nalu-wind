@@ -149,7 +149,53 @@ void green_gauss_rhs(
     }
   }
   ops.volume(integrand, rhs);
+}
 
+template <int poly_order, typename Scalar>
+void green_gauss_rhs_linearized(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const nodal_scalar_view<poly_order, Scalar>& vol,
+  const nodal_vector_view<poly_order, Scalar>& delta,
+  nodal_vector_view<poly_order, Scalar>& rhs)
+{
+  constexpr int n1D = poly_order + 1;
+
+  nodal_vector_workview<poly_order, Scalar> work_integrand;
+  auto& integrand = work_integrand.view();
+
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const auto scv = vol(k,j,i);
+        integrand(k, j, i, XH) = -delta(k, j, i, XH) * scv;
+        integrand(k, j, i, YH) = -delta(k, j, i, YH) * scv;
+        integrand(k, j, i, ZH) = -delta(k, j, i, ZH) * scv;
+      }
+    }
+  }
+  ops.volume(integrand, rhs);
+}
+
+template <int poly_order, typename Scalar>
+void green_gauss_rhs_linearized(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const nodal_scalar_view<poly_order, Scalar>& vol,
+  const nodal_scalar_view<poly_order, Scalar>& delta,
+  nodal_scalar_view<poly_order, Scalar>& rhs)
+{
+  constexpr int n1D = poly_order + 1;
+
+  nodal_scalar_workview<poly_order, Scalar> work_integrand;
+  auto& integrand = work_integrand.view();
+
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        integrand(k, j, i) = -delta(k, j, i) * vol(k, j, i);
+      }
+    }
+  }
+  ops.volume(integrand, rhs);
 }
 
 }

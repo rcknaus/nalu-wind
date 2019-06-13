@@ -13,7 +13,7 @@
 #include <KokkosInterface.h>
 #include <SimdInterface.h>
 
-#include <master_element/TensorProductCVFEMDiffusionMetric.h>
+#include <master_element/TensorProductCVFEMAdvectionMetric.h>
 #include <element_promotion/NodeMapMaker.h>
 #include <stk_util/util/ReportHandler.hpp>
 
@@ -27,7 +27,7 @@ template <int p> ko::scs_vector_view<p> areas(ko::vector_view<p> coordinates)
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
     auto work_metric = scs_vector_array<DoubleType, p>();
     auto metric = la::make_view(work_metric);
-    high_order_metrics::compute_laplacian_metric_linear(ops, local_coords, metric);
+    high_order_metrics::compute_area_linear(ops, local_coords, metric);
 
     for (int dj = 0; dj < 3; ++dj) {
       for (int k = 0; k < p + 1; ++k) {
@@ -43,9 +43,9 @@ template <int p> ko::scs_vector_view<p> areas(ko::vector_view<p> coordinates)
   }
   return mapped_area;
 }
-template ko::scs_vector_view<1> mapped_areas<1>(ko::vector_view<1>);
-template ko::scs_vector_view<2> mapped_areas<2>(ko::vector_view<2>);
-template ko::scs_vector_view<3> mapped_areas<3>(ko::vector_view<3>);
-template ko::scs_vector_view<4> mapped_areas<4>(ko::vector_view<4>);
+template ko::scs_vector_view<1> areas<1>(ko::vector_view<1>);
+template ko::scs_vector_view<2> areas<2>(ko::vector_view<2>);
+template ko::scs_vector_view<3> areas<3>(ko::vector_view<3>);
+template ko::scs_vector_view<4> areas<4>(ko::vector_view<4>);
 
 }}

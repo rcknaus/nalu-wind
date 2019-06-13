@@ -27,6 +27,7 @@ add_sources(GlobalSourceList
    MomentumWallFunctionElemKernel.C
    PressurePoissonHOElemKernel.C
    ProjectedNodalGradientHOElemKernel.C
+   ProjectedNodalGradientKernel.C
    ScalarAdvDiffElemKernel.C
    ScalarAdvDiffHOElemKernel.C
    ScalarDiffElemKernel.C
