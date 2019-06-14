@@ -84,30 +84,6 @@ nodal_vector_array<DoubleType, p> gather_vector_delta(
   return guess;
 }
 
-
-template <int p, typename TpetraVectorViewType>
-nodal_scalar_array<DoubleType, p> residual_guess(
-  int index,
-  const elem_ordinal_view_t<p>& entToLID,
-  const TpetraVectorViewType& xin,
-  const ko::scalar_view<p>& solField)
-{
-  static constexpr int n1D = p + 1;
-  nodal_scalar_array<DoubleType, p> guess;
-  for (int n = 0; n < simdLen && valid_index(entToLID(index, n, 0, 0, 0)); ++n) {
-    for (int k = 0; k < n1D; ++k) {
-      for (int j = 0; j < n1D; ++j) {
-        for (int i = 0; i < n1D; ++i) {
-          stk::simd::get_data(guess(k, j, i), n) =
-              stk::simd::get_data(solField(index, k, j, i), n) + xin(entToLID(index, n, k, j, i), 0);
-        }
-      }
-    }
-  }
-  return guess;
-}
-
-
 template <int p, typename TpetraVectorViewType>
 void add_element_rhs_to_local_tpetra_vector(
   int index, const elem_ordinal_view_t<p>& entToLID,
@@ -119,7 +95,7 @@ void add_element_rhs_to_local_tpetra_vector(
     for (int k = 0; k < n1D; ++k) {
       for (int j = 0; j < n1D; ++j) {
         for (int i = 0; i < n1D; ++i) {
-          yout(entToLID(index, n, k, j, i), 0) -= stk::simd::get_data(simdrhs(k, j, i), n);
+          yout(entToLID(index, n, k, j, i), 0) += stk::simd::get_data(simdrhs(k, j, i), n);
         }
       }
     }
@@ -143,10 +119,10 @@ void add_element_rhs_to_local_tpetra_vector(
         for (int i = 0; i < n1D; ++i) {
           const auto rowLid = entToLID(index, n, k, j, i);
           if (rowLid < maxOwnedLID) {
-            yOwned(rowLid, 0) -= stk::simd::get_data(simdrhs(k, j, i), n);
+            yOwned(rowLid, 0) += stk::simd::get_data(simdrhs(k, j, i), n);
           }
           else if (rowLid < maxSharedNotOwnedLid) {
-            yShared(rowLid - maxOwnedLID, 0) -= stk::simd::get_data(simdrhs(k, j, i), n);
+            yShared(rowLid - maxOwnedLID, 0) += stk::simd::get_data(simdrhs(k, j, i), n);
           }
         }
       }
@@ -172,10 +148,10 @@ void add_element_rhs_to_local_tpetra_vector(
           const auto rowLid = entToLID(index, n, k, j, i);
           for (int d = 0; d < 3; ++d) {
             if (rowLid < maxOwnedLID) {
-              yOwned(rowLid, d) -= stk::simd::get_data(simdrhs(k, j, i, d), n);
+              yOwned(rowLid, d) += stk::simd::get_data(simdrhs(k, j, i, d), n);
             }
             else if (rowLid < maxSharedNotOwnedLid) {
-              yShared(rowLid - maxOwnedLID, d) -= stk::simd::get_data(simdrhs(k, j, i, d), n);
+              yShared(rowLid - maxOwnedLID, d) += stk::simd::get_data(simdrhs(k, j, i, d), n);
             }
           }
         }
@@ -197,7 +173,7 @@ void update_solution(
   const auto& buckets = bulk.get_buckets(stk::topology::NODE_RANK, active_locally_owned);
   for (const auto* ib : buckets) {
     for (const auto node : *ib) {
-      *stk::mesh::field_data(qField, node) -= xv(nodeEntToLID(node.local_offset()), 0);
+      *stk::mesh::field_data(qField, node) += xv(nodeEntToLID(node.local_offset()), 0);
     }
   }
   stk::mesh::copy_owned_to_shared(bulk, {&qField});
@@ -215,7 +191,7 @@ void write_solution_to_field(
   const auto& buckets = bulk.get_buckets(stk::topology::NODE_RANK, active_locally_owned);
   for (const auto* ib : buckets) {
     for (const auto node : *ib) {
-      *stk::mesh::field_data(tmpField, node) = -xv(nodeEntToLID(node.local_offset()), 0);
+      *stk::mesh::field_data(tmpField, node) = xv(nodeEntToLID(node.local_offset()), 0);
     }
   }
   stk::mesh::copy_owned_to_shared(bulk, {&tmpField});
@@ -235,7 +211,7 @@ void write_solution_to_field(
     for (const auto node : *ib) {
       auto* data = stk::mesh::field_data(tmpField, node);
       for (int d = 0; d < 3; ++d) {
-        data[d] = -xv(nodeEntToLID(node.local_offset()), d);
+        data[d] = xv(nodeEntToLID(node.local_offset()), d);
       }
     }
   }

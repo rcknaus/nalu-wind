@@ -5,17 +5,16 @@
 /*  directory structure                                                   */
 /*------------------------------------------------------------------------*/
 
-#include <SimdFieldGather.h>
-#include <CVFEMTypeDefs.h>
-#include <ElemDataRequests.h>
-#include <FieldTypeDef.h>
-#include <KokkosInterface.h>
-#include <SimdInterface.h>
-
-#include <master_element/TensorProductCVFEMVolumeMetric.h>
-#include <element_promotion/NodeMapMaker.h>
-
-#include <stk_util/util/ReportHandler.hpp>
+#include "SimdFieldGather.h"
+#include "MatrixFreeTraits.h"
+#include "CVFEMTypeDefs.h"
+#include "ElemDataRequests.h"
+#include "FieldTypeDef.h"
+#include "KokkosInterface.h"
+#include "SimdInterface.h"
+#include "master_element/TensorProductCVFEMVolumeMetric.h"
+#include "element_promotion/NodeMapMaker.h"
+#include "MatrixFreeTraits.h"
 
 namespace sierra { namespace nalu{
 
@@ -80,12 +79,23 @@ template <int p> elem_ordinal_view_t<p> element_entity_offset_to_gid_map(
       [&b, &localSimdMeshIndex, entToLidMap, perm, entityElemRowMap, simdBucketLen, bucketLen](int e) {
       const int numSimdElems = get_length_of_next_simd_group(e, bucketLen);
       for (int elemSimdIndex = 0; elemSimdIndex < simdLen; ++elemSimdIndex) {
-        const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
-        for (int k = 0; k < n1D; ++k) {
-          for (int j = 0; j < n1D; ++j) {
-            for (int i = 0; i < n1D; ++i) {
-              entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i) = (elemSimdIndex < numSimdElems) ?
-                  entToLidMap(nodes[perm(k, j, i)].local_offset()) : invalid_node_index;
+        if (elemSimdIndex >= numSimdElems)  {
+          for (int k = 0; k < n1D; ++k) {
+            for (int j = 0; j < n1D; ++j) {
+              for (int i = 0; i < n1D; ++i) {
+                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i) = invalid_node_index;
+              }
+            }
+          }
+        }
+        else {
+          const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
+          for (int k = 0; k < n1D; ++k) {
+            for (int j = 0; j < n1D; ++j) {
+              for (int i = 0; i < n1D; ++i) {
+                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i)
+                    =  entToLidMap(nodes[perm(k, j, i)].local_offset());
+              }
             }
           }
         }
@@ -95,10 +105,10 @@ template <int p> elem_ordinal_view_t<p> element_entity_offset_to_gid_map(
   });
   return entityElemRowMap;
 }
-template elem_ordinal_view_t<1> element_entity_offset_to_gid_map<1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
-template elem_ordinal_view_t<2> element_entity_offset_to_gid_map<2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
-template elem_ordinal_view_t<3> element_entity_offset_to_gid_map<3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
-template elem_ordinal_view_t<4> element_entity_offset_to_gid_map<4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
+template elem_ordinal_view_t<POLY1> element_entity_offset_to_gid_map<POLY1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
+template elem_ordinal_view_t<POLY2> element_entity_offset_to_gid_map<POLY2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
+template elem_ordinal_view_t<POLY3> element_entity_offset_to_gid_map<POLY3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
+template elem_ordinal_view_t<POLY4> element_entity_offset_to_gid_map<POLY4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, Kokkos::View<int*>);
 
 template <int p> elem_entity_view_t<p> element_entity_view(
   const stk::mesh::BulkData& bulk,
@@ -119,13 +129,24 @@ template <int p> elem_entity_view_t<p> element_entity_view(
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team, simdBucketLen),
       [&b, &localSimdMeshIndex, perm, entityElemView, simdBucketLen, bucketLen](int e) {
       const int numSimdElems = get_length_of_next_simd_group(e, bucketLen);
+
       for (int elemSimdIndex = 0; elemSimdIndex < simdLen; ++elemSimdIndex) {
-        const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
-        for (int k = 0; k < n1D; ++k) {
-          for (int j = 0; j < n1D; ++j) {
-            for (int i = 0; i < n1D; ++i) {
-              entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = (elemSimdIndex < numSimdElems) ?
-                  nodes[perm(k, j, i)] : stk::mesh::Entity();
+        if (elemSimdIndex >= numSimdElems)  {
+          for (int k = 0; k < n1D; ++k) {
+            for (int j = 0; j < n1D; ++j) {
+              for (int i = 0; i < n1D; ++i) {
+                entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = stk::mesh::Entity();
+              }
+            }
+          }
+        }
+        else {
+          const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
+          for (int k = 0; k < n1D; ++k) {
+            for (int j = 0; j < n1D; ++j) {
+              for (int i = 0; i < n1D; ++i) {
+                entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = nodes[perm(k, j, i)];
+              }
             }
           }
         }
@@ -135,10 +156,10 @@ template <int p> elem_entity_view_t<p> element_entity_view(
   });
   return entityElemView;
 }
-template elem_entity_view_t<1> element_entity_view<1>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
-template elem_entity_view_t<2> element_entity_view<2>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
-template elem_entity_view_t<3> element_entity_view<3>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
-template elem_entity_view_t<4> element_entity_view<4>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
+template elem_entity_view_t<POLY1> element_entity_view<POLY1>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
+template elem_entity_view_t<POLY2> element_entity_view<POLY2>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
+template elem_entity_view_t<POLY3> element_entity_view<POLY3>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
+template elem_entity_view_t<POLY4> element_entity_view<POLY4>(const stk::mesh::BulkData&, const stk::mesh::Selector&);
 
 template <int p> void write_to_stk_field(
   const stk::mesh::BulkData& bulk,
@@ -159,10 +180,10 @@ template <int p> void write_to_stk_field(
     }
   }
 }
-template void write_to_stk_field<1>(const stk::mesh::BulkData&, const elem_ordinal_view_t<1>, const ko::scalar_view<1>, ScalarFieldType&);
-template void write_to_stk_field<2>(const stk::mesh::BulkData&, const elem_ordinal_view_t<2>, const ko::scalar_view<2>, ScalarFieldType&);
-template void write_to_stk_field<3>(const stk::mesh::BulkData&, const elem_ordinal_view_t<3>, const ko::scalar_view<3>, ScalarFieldType&);
-template void write_to_stk_field<4>(const stk::mesh::BulkData&, const elem_ordinal_view_t<4>, const ko::scalar_view<4>, ScalarFieldType&);
+template void write_to_stk_field<POLY1>(const stk::mesh::BulkData&, const elem_ordinal_view_t<POLY1>, const ko::scalar_view<POLY1>, ScalarFieldType&);
+template void write_to_stk_field<POLY2>(const stk::mesh::BulkData&, const elem_ordinal_view_t<POLY2>, const ko::scalar_view<POLY2>, ScalarFieldType&);
+template void write_to_stk_field<POLY3>(const stk::mesh::BulkData&, const elem_ordinal_view_t<POLY3>, const ko::scalar_view<POLY3>, ScalarFieldType&);
+template void write_to_stk_field<POLY4>(const stk::mesh::BulkData&, const elem_ordinal_view_t<POLY4>, const ko::scalar_view<POLY4>, ScalarFieldType&);
 
 template <int p> ko::scalar_view<p> gather_field(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector, const ScalarFieldType& field)
 {
@@ -182,10 +203,10 @@ template <int p> ko::scalar_view<p> gather_field(const stk::mesh::BulkData& bulk
   });
   return scalar_field_view;
 }
-template ko::scalar_view<1> gather_field<1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
-template ko::scalar_view<2> gather_field<2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
-template ko::scalar_view<3> gather_field<3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
-template ko::scalar_view<4> gather_field<4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
+template ko::scalar_view<POLY1> gather_field<POLY1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
+template ko::scalar_view<POLY2> gather_field<POLY2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
+template ko::scalar_view<POLY3> gather_field<POLY3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
+template ko::scalar_view<POLY4> gather_field<POLY4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const ScalarFieldType&);
 
 template <int p> ko::vector_view<p> gather_field(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector, const VectorFieldType& field)
 {
@@ -207,9 +228,9 @@ template <int p> ko::vector_view<p> gather_field(const stk::mesh::BulkData& bulk
   });
   return vector_field_view;
 }
-template ko::vector_view<1> gather_field<1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
-template ko::vector_view<2> gather_field<2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
-template ko::vector_view<3> gather_field<3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
-template ko::vector_view<4> gather_field<4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
+template ko::vector_view<POLY1> gather_field<POLY1>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
+template ko::vector_view<POLY2> gather_field<POLY2>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
+template ko::vector_view<POLY3> gather_field<POLY3>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
+template ko::vector_view<POLY4> gather_field<POLY4>(const stk::mesh::BulkData&, const stk::mesh::Selector&, const VectorFieldType&);
 
 }}

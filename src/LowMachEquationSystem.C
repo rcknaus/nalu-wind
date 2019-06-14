@@ -782,6 +782,7 @@ public:
   void solve()
   {
     solver_->solve();
+    std::cout << "momentum it count: " << solver_->iteration_count() << std::endl;
   }
 
   void update_solution()
@@ -805,6 +806,52 @@ public:
   Teuchos::RCP<mfop_type> mfOp_;
   Teuchos::RCP<TpetraMatrixFreeSolver> solver_;
 };
+
+template <int p> class ComputeCorrectedMassFlux
+{
+public:
+  ComputeCorrectedMassFlux(const stk::mesh::BulkData& bulk,
+    stk::mesh::Selector selector,
+    const VectorFieldType& coordField,
+    Kokkos::View<int*> nodeOffsetMap)
+  {
+    entityOffsets_ = element_entity_offset_to_gid_map<p>(bulk, selector, nodeOffsetMap);
+    coords_ = gather_field<p>(bulk, selector, coordField);
+    initialize(bulk, selector);
+  }
+
+
+  void initialize(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
+  {
+    const auto& meta = bulk.mesh_meta_data();
+    const auto& rhoField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
+    rhop1_ = gather_field<p>(bulk, selector, rhoField.field_of_state(stk::mesh::StateNP1));
+
+    const auto& velField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "velocity");
+    velp1_ = gather_field<p>(bulk, selector, velField.field_of_state(stk::mesh::StateNP1));
+
+    const auto& GpField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx");
+    Gp_ = gather_field<p>(bulk, selector, GpField.field_of_state(stk::mesh::StateNone));
+
+    const auto& pressField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "pressure");
+    pressure_ = gather_field<p>(bulk, selector, pressField.field_of_state(stk::mesh::StateNone));
+  }
+
+  ko::scs_scalar_view<p> compute_mdot(double projTimeScale)
+  {
+    return corrected_mass_flux<p>(projTimeScale, coords_, rhop1_, velp1_, pressure_, Gp_);
+  }
+
+private:
+  double projTimeScale_{1.0};
+  elem_ordinal_view_t<p> entityOffsets_;
+  ko::vector_view<p> coords_;
+  ko::scalar_view<p> rhop1_;
+  ko::vector_view<p> velp1_;
+  ko::vector_view<p> Gp_;
+  ko::scalar_view<p> pressure_;
+};
+
 
 class ContinuitySolver {
 public:
@@ -863,13 +910,21 @@ public:
     auto& bulk = realm.bulk_data();
     mfInterior_->initialize(bulk, selector);
     mfInterior_->set_projected_timescale(realm.get_time_step()/realm.get_gamma1());
-    mfInterior_->compute_mdot(realm.get_time_step()/realm.get_gamma1());
+    compute_mdot();
     mfOp_->compute_rhs(*mfProb_->rhs);
   }
+
+  void compute_mdot()
+  {
+    auto& realm = eqSys_.realm_;
+    mfInterior_->compute_mdot(realm.get_time_step()/realm.get_gamma1());
+  }
+
 
   void solve()
   {
     solver_->solve();
+    std::cout << "continuity it count: " << solver_->iteration_count() << std::endl;
   }
 
   void update_solution()
@@ -903,10 +958,13 @@ LowMachEquationSystem::solve_and_update()
 {
   // wrap timing
   double timeA, timeB;
-  if ( isInit_  && !MF::doMatrixFree) {
+  if ( isInit_ ) {
     continuityEqSys_->compute_projected_nodal_gradient();
+  }
 
-//    continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
+
+  if ( isInit_  && !MF::doMatrixFree) {
+    continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
 
     timeA = NaluEnv::self().nalu_time();
     field_axpby(
@@ -946,7 +1004,6 @@ LowMachEquationSystem::solve_and_update()
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerSolve_ += (timeB - timeA);
 
-    std::cout << "continuity it count: " << contSolv.solver_->iteration_count() << std::endl;
 
     timeA = NaluEnv::self().nalu_time();
     contSolv.update_solution();
@@ -960,6 +1017,7 @@ LowMachEquationSystem::solve_and_update()
       1.0, *continuityEqSys_->pressure_,
       realm_.get_activate_aura());
 
+    contSolv.compute_mdot();
 
     momSolv.create();
     momSolv.initialize();
@@ -997,12 +1055,10 @@ LowMachEquationSystem::solve_and_update()
       timeA = NaluEnv::self().nalu_time();
       momSolv.update_solution();
       timeB = NaluEnv::self().nalu_time();
-      momentumEqSys_->timerAssemble_ += (timeB - timeA);
-
-      std::cout << "momentum it count: " << momSolv.solver_->iteration_count() << std::endl;
-    }
+      momentumEqSys_->timerAssemble_ += (timeB - timeA);    }
     // update all of velocity
     timeA = NaluEnv::self().nalu_time();
+
     field_axpby(
       realm_.meta_data(),
       realm_.bulk_data(),
@@ -1042,8 +1098,6 @@ LowMachEquationSystem::solve_and_update()
       contSolv.update_solution();
       timeB = NaluEnv::self().nalu_time();
       continuityEqSys_->timerAssemble_ += (timeB - timeA);
-
-      std::cout << "continuity it count: " << contSolv.solver_->iteration_count() << std::endl;
     }
 
     // update pressure
@@ -1056,6 +1110,10 @@ LowMachEquationSystem::solve_and_update()
       realm_.get_activate_aura());
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerAssemble_ += (timeB-timeA);
+
+    if (MF::doMatrixFree) {
+      contSolv.compute_mdot();
+    }
 
     timeA = NaluEnv::self().nalu_time();
     stk::mesh::field_copy(*momentumEqSys_->velocity_, *momentumEqSys_->provisionalVelocity_);

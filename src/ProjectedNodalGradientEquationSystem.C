@@ -33,10 +33,8 @@
 #include "MatrixFreeOperator.h"
 #include "TpetraMatrixFreeSolver.h"
 #include "MatrixFreeTypes.h"
-#include "tpetra_linsys/TpetraMeshManager.h"
-#include "ConductionInteriorOperator.h"
+#include "NoBoundaryOperator.h"
 #include "ProjectedNodalGradientInteriorOperator.h"
-#include "SparsifiedLaplacian.h"
 #include "MassDiagonal.h"
 
 // user functions
@@ -67,6 +65,9 @@
 namespace sierra{
 namespace nalu{
 
+constexpr bool doMF = false;
+
+
 //==========================================================================
 // Class Definition
 //==========================================================================
@@ -93,10 +94,12 @@ ProjectedNodalGradientEquationSystem::ProjectedNodalGradientEquationSystem(
     dqdx_(NULL),
     qTmp_(NULL)
 {
-  // extract solver name and solver object
+  // extract solver name and solver objectz
   std::string solverName = realm_.equationSystems_.get_solver_block_name(dofName);
   LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, eqType_);
-  linsys_ = LinearSystem::create(realm_, realm_.spatialDimension_, this, solver);
+  linsys_ = LinearSystem::create(realm_, (doMF) ? 1 : realm_.spatialDimension_, this, solver);
+//  linsys_ = LinearSystem::create(realm_, 1, this, solver);
+
 
   // push back EQ to manager
   realm_.push_equation_to_systems(this);
@@ -161,6 +164,8 @@ void
 ProjectedNodalGradientEquationSystem::register_interior_algorithm(
   stk::mesh::Part *part)
 {
+  if (doMF) return;
+
   // types of algorithms
   const AlgorithmType algType = INTERIOR;
 
@@ -343,7 +348,7 @@ void
 ProjectedNodalGradientEquationSystem::initialize()
 {
 
-  if (MF::doMatrixFree) {
+  if (doMF) {
     auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
     tpetralinsys.buildSparsifiedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
     linsys_->finalizeLinearSystem();
@@ -396,9 +401,11 @@ ProjectedNodalGradientEquationSystem::solve_and_update()
 
 class PNGSolver {
 public:
+  static constexpr int ndof = 3;
+
   using mfop_type = MFOperatorParallel<ProjectedNodalGradientInteriorOperator<MF::p>, NoOperator>;
 
-  static constexpr bool precondition = true;
+  static constexpr bool precondition = false;
 
   PNGSolver(ProjectedNodalGradientEquationSystem& eqSys) : eqSys_(eqSys) {}
 
@@ -423,23 +430,21 @@ public:
       tpetralinsys.ownedRowsMap_,
       tpetralinsys.sharedNotOwnedRowsMap_,
       tpetralinsys.sharedAndOwnedRowsMap_,
-      1
+      ndof
     );
-    mfProb_ = make_rcp<MatrixFreeProblem>(mfOp_, 1);
+    mfProb_ = make_rcp<MatrixFreeProblem>(mfOp_, ndof);
     auto sln = mfProb_->sln;
     auto rhs = mfProb_->rhs;
-    solver_ = make_rcp<TpetraMatrixFreeSolver>(1);
+    solver_ = make_rcp<TpetraMatrixFreeSolver>(ndof);
     if (precondition) {
       mfMass_ = make_rcp<MassInteriorDiagonal<MF::p>>(bulk, selector, tpetralinsys, coordField);
       tpetralinsys.zeroSystem();
       mfMass_->compute_diagonal();
       tpetralinsys.loadComplete();
-      auto coordMV = make_rcp<mv_type>(sln->getMap(), 3);
-      tpetralinsys.copy_stk_to_tpetra(&coordField, coordMV);
-      solver_->create_muelu_preconditioner(tpetralinsys.ownedMatrix_, coordMV);
+      solver_->create_ifpack2_preconditioner(tpetralinsys.ownedMatrix_);
     }
     solver_->create_problem(*mfProb_);
-    solver_->set_tolerance(1.0e-4);
+    solver_->set_tolerance(1.0e-8);
     solver_->set_max_iteration_count(100);
     solver_->create_solver();
   }
@@ -449,8 +454,8 @@ public:
     auto& realm = eqSys_.realm_;
     auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
     auto& bulk = realm.bulk_data();
-
-    const auto& qField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK, eqSys_.dofName_);
+    const auto& qField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK,
+      "pressure");
     mfInterior_->initialize(bulk, selector, qField, *eqSys_.dqdx_);
     mfOp_->compute_rhs(*mfProb_->rhs);
   }
@@ -458,6 +463,8 @@ public:
   void solve()
   {
     solver_->solve();
+    std::cout << "png it count: " << solver_->iteration_count() << std::endl;
+
   }
 
   void update_solution()
@@ -470,7 +477,7 @@ public:
 
     write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), *eqSys_.qTmp_);
     if (realm.hasPeriodic_) {
-      realm.periodic_delta_solution_update(eqSys_.qTmp_, 1);
+      realm.periodic_delta_solution_update(eqSys_.qTmp_, 3);
     }
   }
   ProjectedNodalGradientEquationSystem& eqSys_;
@@ -490,34 +497,45 @@ ProjectedNodalGradientEquationSystem::solve_and_update_external()
   static PNGSolver mfSolver(*this);
   if (isInit_) {
     mfSolver.create();
+    isInit_ = false;
   }
 
   for ( int k = 0; k < maxIterations_; ++k ) {
 
     // projected nodal gradient, load_complete and solve
-    if(!MF::doMatrixFree) {
+    if(!doMF) {
       assemble_and_solve(qTmp_);
     }
     else {
-
       timeA = NaluEnv::self().nalu_time();
       mfSolver.assemble();
-      timeB
-      mfSolver().
+      timeB = NaluEnv::self().nalu_time();
+      timerAssemble_ += timeB - timeA;
 
+      timeA = NaluEnv::self().nalu_time();
+      mfSolver.solve();
+      timeB = NaluEnv::self().nalu_time();
+      timerSolve_ += timeB - timeA;
+
+      timeA = NaluEnv::self().nalu_time();
+      mfSolver.update_solution();
+      timeB = NaluEnv::self().nalu_time();
+      timerAssemble_ += timeB - timeA;
     }
 
-
     // update
-    double timeA = NaluEnv::self().nalu_time();
+    timeA = NaluEnv::self().nalu_time();
     field_axpby(
       realm_.meta_data(),
       realm_.bulk_data(),
       1.0, *qTmp_,
       1.0, *dqdx_,
       realm_.get_activate_aura());
-    double timeB = NaluEnv::self().nalu_time();
+    timeB = NaluEnv::self().nalu_time();
     timerAssemble_ += (timeB-timeA);
+
+    realm_.output_converged_results();
+    exit(1);
   }
 }
 

@@ -6,12 +6,14 @@
 /*------------------------------------------------------------------------*/
 #include "kernel/ProjectedNodalGradientKernel.h"
 
+#include "MatrixFreeTraits.h"
+
 #include <SimdInterface.h>
 #include <KokkosInterface.h>
 #include <CVFEMTypeDefs.h>
 #include <master_element/DirectionMacros.h>
 
-#include <kernel/TensorProductCVFEMPNG.h>
+#include "kernel/TensorProductCVFEMPNG.h"
 
 namespace sierra { namespace nalu {
 
@@ -23,16 +25,15 @@ template <int p> nodal_vector_array<DoubleType, p> png_element_residual<p>::resi
   const ko::vector_view<p>& dqdx)
 {
   static const auto ops = CVFEMOperators<p>();
+
   auto rhs = la::zero<nodal_vector_array<ftype, p>>();
   auto v_rhs = la::make_view(rhs);
 
-  auto elem_area = scs_vector_view<p, ftype>(&area(index,0,0,0,0,0));
-  auto elem_vol = nodal_scalar_view<p, ftype>(&volume(index,0,0,0));
-
-  auto elem_q = nodal_scalar_view<p, ftype>(&q(index,0,0,0));
-  auto elem_dqdx = nodal_vector_view<p, ftype>(&dqdx(index,0,0,0,0));
-
-  tensor_assembly::green_gauss_rhs(ops, elem_area, elem_vol, elem_q, elem_dqdx, v_rhs);
+  const auto elem_area = scs_vector_view<p>(&area(index, 0, 0, 0, 0, 0));
+  const auto elem_volume = nodal_scalar_view<p>(&volume(index, 0, 0, 0));
+  const auto elem_q = nodal_scalar_view<p>(&q(index, 0, 0, 0));
+  const auto elem_dqdx = nodal_vector_view<p>(&dqdx(index, 0, 0, 0, 0));
+  tensor_assembly::green_gauss_rhs(ops, elem_area, elem_volume, elem_q, elem_dqdx, v_rhs);
   return rhs;
 }
 
@@ -67,30 +68,31 @@ template <int p> nodal_scalar_array<DoubleType, p> png_element_residual<p>::line
   return rhs;
 }
 
-
 template <int p> nodal_scalar_array<DoubleType, p> png_element_residual<p>::lhs_diagonal(
   int index, const ko::scalar_view<p>& volume)
 {
   static const auto ops = CVFEMOperators<p>();
 
-  auto lhs = la::zero<matrix_array<ftype, p>>();
-  auto v_lhs = la::make_view(lhs);
+  bool lumped = true;
+  const auto& weights = (lumped) ? ops.mat_.nodalWeights : ops.mat_.lumpedNodalWeights;
 
   constexpr int n1D = p + 1;
   auto diag = nodal_scalar_array<ftype, p>();
   for (int k = 0; k < n1D; ++k) {
+    const auto Wk = weights(k,k);
     for (int j = 0; j < n1D; ++j) {
+      const auto WjWk = Wk * weights(j,j);
       for (int i = 0; i < n1D; ++i) {
-        diag(k, j, i) = volume(index, k, j, i);
+        diag(k, j, i) = WjWk * weights(i, i) * volume(index, k, j, i);
       }
     }
   }
   return diag;
 }
-template class png_element_residual<1>;
-template class png_element_residual<2>;
-template class png_element_residual<3>;
-template class png_element_residual<4>;
+template class png_element_residual<POLY1>;
+template class png_element_residual<POLY2>;
+template class png_element_residual<POLY3>;
+template class png_element_residual<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

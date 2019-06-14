@@ -111,7 +111,7 @@ public:
   VectorFieldType *dqdx_;
   VectorFieldType *qTmp_;  
 
-  bool isInit_;
+  bool isInit_{true};
 };
 
 } // namespace nalu

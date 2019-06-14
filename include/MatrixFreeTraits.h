@@ -1,22 +1,28 @@
-/*------------------------------------------------------------------------*/
-/*  Copyright 2014 Sandia Corporation.                                    */
-/*  This software is released under the license detailed                  */
-/*  in the file, LICENSE, which is located in the top-level Nalu          */
-/*  directory structure                                                   */
-/*------------------------------------------------------------------------*/
-
-
 #ifndef MFTraits_h
 #define MFTraits_h
-
-#include <stk_topology/topology.hpp>
 
 namespace sierra {
 namespace nalu {
 
+#ifndef POLY1
+#define POLY1 1
+#endif
+
+#ifndef POLY2
+#define POLY2 2
+#endif
+
+#ifndef POLY3
+#define POLY3 3
+#endif
+
+#ifndef POLY4
+#define POLY4 4
+#endif
+
 struct MF {
   static constexpr bool doMatrixFree = true;
-  static constexpr int p = 1;
+  static constexpr int p = POLY1;
 };
 
 } // namespace nalu

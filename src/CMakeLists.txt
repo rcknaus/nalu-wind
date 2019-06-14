@@ -86,6 +86,7 @@ add_sources(GlobalSourceList
    ContinuityMassElemSuppAlgDep.C
    CopyFieldAlgorithm.C
    CoriolisSrc.C
+   CVFEMAreas.C
    CVFEMCorrectedMassFlux.C
    CVFEMVolumes.C
    CVFEMMappedAreas.C
@@ -119,6 +120,7 @@ add_sources(GlobalSourceList
    LinearSolvers.C
    LinearSystem.C
    LowMachEquationSystem.C
+   MassDiagonal.C
    MassFractionEquationSystem.C
    MaterialProperty.C
    MaterialPropertys.C

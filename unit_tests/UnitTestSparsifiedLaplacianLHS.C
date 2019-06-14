@@ -21,10 +21,13 @@ namespace sierra { namespace nalu {
 
 template <int p> LocalArray<DoubleType[p][p][p][8][8]> compute_sparsified_laplacian_matrix(bool print = false)
 {
+//  double Q[3][3] = {
+//      {0,0,-1},{0,1,-1},{0.5,0.5,1}
+//  };
+
   double Q[3][3] = {
-      {0,0,-1},{0,1,-1},{0.5,0.5,1}
+      {1,0,0},{0,1,0},{0,0,1}
   };
-  std::cout << "detj: " << determinant33(&Q[0][0]) << std::endl;
   ThrowRequire(determinant33(&Q[0][0]) > 0);
 
   nodal_vector_array<DoubleType, p> work_coords;
@@ -124,15 +127,6 @@ namespace {
     box(1,1,0,ZH) = lowerLeft[ZH] + delta[ZH];
     box(1,1,1,ZH) = lowerLeft[ZH] + delta[ZH];
 
-//
-//    (-3.14159, -3.14159, 3.14159),
-//    (-3.14159, -3.14159, 2.0944),
-//    (-1.0472, -2.0944, 2.0944),
-//    (-3.14159, -2.0944, 3.14159),
-//    (-2.0944, -3.14159, 3.14159),
-//    (-2.0944, -1.0472, 2.0944),
-//    (-3.14159, -2.0944, 2.0944),
-//    (-2.0944, -2.0944, 1.0472)
 
     return box;
   }

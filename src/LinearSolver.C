@@ -201,6 +201,7 @@ TpetraLinearSolver::solve(
   const int status = 0;
   int whichNorm = 2;
   finalResidNrm=0.0;
+  std::cout << "------------ (preproblem)" << std::endl;
 
   double time = -NaluEnv::self().nalu_time();
   if (activateMueLu_)
@@ -233,8 +234,23 @@ TpetraLinearSolver::solve(
   solver_->setParameters(params);
 
   problem_->setProblem();
-  solver_->solve();
+//  std::cout << "xlen: " <<problem_->getLHS()->getNumVectors() << ", ylen: "<< problem_->getRHS()->getNumVectors()  << std::endl;
 
+// //  problem vectors:
+//  std::cout << "------------ (presolve)" << std::endl;
+//  const auto x_view = problem_->getLHS()->getLocalView<HostSpace>();
+//  const auto y_view =  problem_->getRHS()->getLocalView<HostSpace>();
+//  ThrowRequire(x_view.extent_int(0) == y_view.extent_int(0));
+//  for (int k = 0; k < y_view.extent_int(0); k += 3) {
+//    std::cout << k/3 << "(x,y): (" << x_view(k,0) << ", " << -y_view(k,0)  << ", " << -y_view(k+1,0) << ", "  << -y_view(k+2,0)<<")" << std::endl;
+//  }
+  std::cout << "------------ (solve)" << std::endl;
+  solver_->solve();
+//  std::cout << "------------ (postsolve)"  << std::endl;
+//  for (int k = 0; k < y_view.extent_int(0); k += 3) {
+//    std::cout << k/3 << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k+1,0) << ", "  << y_view(k+2,0)<<")" << std::endl;
+//  }
+//  std::cout << "------------" << std::endl;
   iters = solver_->getNumIters();
   residual_norm(whichNorm, sln, finalResidNrm);
 

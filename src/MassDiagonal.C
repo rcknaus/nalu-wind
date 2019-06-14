@@ -1,15 +1,14 @@
 
 #include "MassDiagonal.h"
 
+#include "MatrixFreeTraits.h"
 #include "SimdFieldGather.h"
 #include "CVFEMMappedAreas.h"
 #include "CVFEMVolumes.h"
 #include "FieldTypeDef.h"
 #include "CVFEMTypeDefs.h"
-
 #include "MatrixFreeTypes.h"
-
-#include "kernel/MassKernel.h"
+#include "kernel/ProjectedNodalGradientKernel.h"
 #include "TpetraLinearSystem.h"
 
 namespace sierra { namespace nalu {
@@ -41,10 +40,10 @@ template <int p> void MassInteriorDiagonal<p>::compute_diagonal()
     }
   }
 }
-template class MassInteriorDiagonal<1>;
-template class MassInteriorDiagonal<2>;
-template class MassInteriorDiagonal<3>;
-template class MassInteriorDiagonal<4>;
+template class MassInteriorDiagonal<POLY1>;
+template class MassInteriorDiagonal<POLY2>;
+template class MassInteriorDiagonal<POLY3>;
+template class MassInteriorDiagonal<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra
