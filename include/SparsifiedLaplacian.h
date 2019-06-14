@@ -32,7 +32,6 @@ template <int p> struct SparsifiedLaplacianInterior
     const VectorFieldType& coordField);
 
   void initialize();
-  void set_gamma(double);
   void initialize_connectivity();
   void compute_lhs_simd();
   void compute_lhs();

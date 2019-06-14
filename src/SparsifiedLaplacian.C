@@ -1,6 +1,5 @@
 
 #include "SparsifiedLaplacian.h"
-
 #include "kernel/SparsifiedEdgeLaplacian.h"
 
 #include "SimdFieldGather.h"
@@ -10,6 +9,7 @@
 #include "CVFEMTypeDefs.h"
 
 #include "MatrixFreeTypes.h"
+#include "MatrixFreeTraits.h"
 
 #include "TpetraLinearSystem.h"
 
@@ -31,14 +31,6 @@ template <int p> void SparsifiedLaplacianInterior<p>::initialize_connectivity()
 {
   linsys_.buildSparsifiedElemToNodeGraph(selector_);
 }
-
-//const std::vector<stk::mesh::Entity> & entities,
-//std::vector<int> &scratchIds,
-//std::vector<double> & /* scratchVals */,
-//const std::vector<double> & rhs,
-//const std::vector<double> & lhs,
-//const char * /* trace_tag */
-//)
 
 namespace {
 template <typename ViewType, typename Scalar> KOKKOS_FORCEINLINE_FUNCTION
@@ -90,29 +82,6 @@ template <int p> void SparsifiedLaplacianInterior<p>::compute_lhs_simd()
                 lhs[8 * j + i] = stk::simd::get_data(all_lhs(n, m, l, perm[j], perm[i]), nsimd);
               }
             }
-
-//            entities[0] = entities_(index, nsimd, n + 0, m + 0, l + 0);
-//            entities[1] = entities_(index, nsimd, n + 0, m + 0, l + 1);
-//            entities[2] = entities_(index, nsimd, n + 0, m + 1, l + 0);
-//            entities[3] = entities_(index, nsimd, n + 0, m + 1, l + 1);
-//            entities[4] = entities_(index, nsimd, n + 1, m + 0, l + 0);
-//            entities[5] = entities_(index, nsimd, n + 1, m + 0, l + 1);
-//            entities[6] = entities_(index, nsimd, n + 1, m + 1, l + 0);
-//            entities[7] = entities_(index, nsimd, n + 1, m + 1, l + 1);
-//            for (int j = 0; j < 8; ++j) {
-//              for (int i = 0; i < 8; ++i) {
-//                lhs[8 * j + i] = stk::simd::get_data(all_lhs(n, m, l, perm[j], perm[i]), nsimd);
-//              }
-//            }
-
-//            for (int j = 0; j < 8; ++j) {
-//              for (int i = 0; i < 8; ++i) {
-//                std:: cout << lhs[8 * j + i] << ", ";
-//              }
-//              std::cout << ", entity: " << entities[j].local_offset() << std::endl;
-//            }
-//            std::cout << "---------" << std::endl;
-//            exit(1);
             linsys_.sumInto(entities, scratchIds, scratchVals, rhs, lhs, __FILE__);
           }
         }
@@ -160,14 +129,6 @@ template <int p> void SparsifiedLaplacianInterior<p>::compute_lhs()
                 lhs[8 * j + i] = local_lhs(j,i);
               }
             }
-//            for (int j = 0; j < 8; ++j) {
-//              for (int i = 0; i < 8; ++i) {
-//                std:: cout << lhs[8 * j + i] << ", ";
-//              }
-//              std::cout << ", entity new: " << entities[j].local_offset() << std::endl;
-//            }
-//            std::cout << "---------" << std::endl;
-//            exit(1);
             linsys_.sumInto(entities, scratchIds, scratchVals, rhs, lhs, __FILE__);
           }
         }
@@ -176,10 +137,10 @@ template <int p> void SparsifiedLaplacianInterior<p>::compute_lhs()
   }
 }
 
-template class SparsifiedLaplacianInterior<1>;
-template class SparsifiedLaplacianInterior<2>;
-template class SparsifiedLaplacianInterior<3>;
-template class SparsifiedLaplacianInterior<4>;
+template class SparsifiedLaplacianInterior<POLY1>;
+template class SparsifiedLaplacianInterior<POLY2>;
+template class SparsifiedLaplacianInterior<POLY3>;
+template class SparsifiedLaplacianInterior<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

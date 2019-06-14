@@ -38,7 +38,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
         for (int i = 0; i < p; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { scsInterp(0, i), scsInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3]  = {0.,0.,0.};
           hex_areav_x(base_box, interpi, interpj, interpk, areav);
 
           metric(XH, k, j, i, XH) = areav[XH];
@@ -54,7 +54,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { scsInterp(0, j), scsInterp(1, j) };
         for (int i = 0; i < p + 1; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3] = {0.,0.,0.};
           hex_areav_y(base_box, interpi, interpj, interpk, areav);
 
           metric(YH, k, j, i, XH) = areav[XH];
@@ -70,7 +70,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
         for (int i = 0; i < p + 1; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3] = {0.,0.,0.};
           hex_areav_z(base_box, interpi, interpj, interpk, areav);
 
           metric(ZH, k, j, i, XH) = areav[XH];

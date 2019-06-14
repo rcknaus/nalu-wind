@@ -958,12 +958,11 @@ LowMachEquationSystem::solve_and_update()
 {
   // wrap timing
   double timeA, timeB;
-  if ( isInit_ ) {
+  if (isInit_) {
     continuityEqSys_->compute_projected_nodal_gradient();
   }
 
-
-  if ( isInit_  && !MF::doMatrixFree) {
+  if (isInit_  && !MF::doMatrixFree) {
     continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
 
     timeA = NaluEnv::self().nalu_time();

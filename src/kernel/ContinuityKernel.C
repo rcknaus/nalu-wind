@@ -12,6 +12,8 @@
 #include <CVFEMTypeDefs.h>
 #include <master_element/DirectionMacros.h>
 
+#include "MatrixFreeTraits.h"
+
 #include <master_element/Hex8GeometryFunctions.h>
 #include <kernel/TensorProductCVFEMPressurePoisson.h>
 #include <kernel/TensorProductCVFEMDiffusion.h>
@@ -48,10 +50,10 @@ template <int p> nodal_scalar_array<DoubleType, p> continuity_element_residual<p
   tensor_assembly::scalar_diffusion_rhs(ops, metric, delta, v_rhs);
   return rhs;
 }
-template class continuity_element_residual<1>;
-template class continuity_element_residual<2>;
-template class continuity_element_residual<3>;
-template class continuity_element_residual<4>;
+template class continuity_element_residual<POLY1>;
+template class continuity_element_residual<POLY2>;
+template class continuity_element_residual<POLY3>;
+template class continuity_element_residual<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

@@ -14,7 +14,7 @@
 
 namespace sierra { namespace nalu{
 
-template <int p> ko::scs_vector_view<p> areas(ko::vector_view<p>);
+template <int p> ko::scs_vector_view<p> area_vectors(ko::vector_view<p>);
 
 }}
 

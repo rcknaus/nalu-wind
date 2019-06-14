@@ -43,6 +43,7 @@
 // stk_mesh/base/fem
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Field.hpp>
+#include <stk_mesh/base/FieldBLAS.hpp>
 #include <stk_mesh/base/FieldParallel.hpp>
 #include <stk_mesh/base/GetBuckets.hpp>
 #include <stk_mesh/base/GetEntities.hpp>
@@ -65,7 +66,7 @@
 namespace sierra{
 namespace nalu{
 
-constexpr bool doMF = false;
+constexpr bool doMF = true;
 
 
 //==========================================================================
@@ -405,7 +406,7 @@ public:
 
   using mfop_type = MFOperatorParallel<ProjectedNodalGradientInteriorOperator<MF::p>, NoOperator>;
 
-  static constexpr bool precondition = false;
+  static constexpr bool precondition = true;
 
   PNGSolver(ProjectedNodalGradientEquationSystem& eqSys) : eqSys_(eqSys) {}
 
@@ -444,7 +445,7 @@ public:
       solver_->create_ifpack2_preconditioner(tpetralinsys.ownedMatrix_);
     }
     solver_->create_problem(*mfProb_);
-    solver_->set_tolerance(1.0e-8);
+    solver_->set_tolerance(1.0e-4);
     solver_->set_max_iteration_count(100);
     solver_->create_solver();
   }
@@ -456,7 +457,10 @@ public:
     auto& bulk = realm.bulk_data();
     const auto& qField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK,
       "pressure");
-    mfInterior_->initialize(bulk, selector, qField, *eqSys_.dqdx_);
+
+    const auto& dqdxField = *bulk.mesh_meta_data().get_field<VectorFieldType>(stk::topology::NODE_RANK,
+      "dpdx");
+    mfInterior_->initialize(bulk, selector, qField, dqdxField);
     mfOp_->compute_rhs(*mfProb_->rhs);
   }
 
@@ -494,14 +498,10 @@ void
 ProjectedNodalGradientEquationSystem::solve_and_update_external()
 {
   double timeA, timeB;
-  static PNGSolver mfSolver(*this);
-  if (isInit_) {
-    mfSolver.create();
-    isInit_ = false;
-  }
+  PNGSolver mfSolver(*this);
+  mfSolver.create();
 
   for ( int k = 0; k < maxIterations_; ++k ) {
-
     // projected nodal gradient, load_complete and solve
     if(!doMF) {
       assemble_and_solve(qTmp_);
@@ -533,9 +533,6 @@ ProjectedNodalGradientEquationSystem::solve_and_update_external()
       realm_.get_activate_aura());
     timeB = NaluEnv::self().nalu_time();
     timerAssemble_ += (timeB-timeA);
-
-    realm_.output_converged_results();
-    exit(1);
   }
 }
 

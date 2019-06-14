@@ -130,28 +130,32 @@ void TpetraMatrixFreeSolver::solve()
 {
   ThrowRequire(solv_ != Teuchos::null);
 
-//  std::cout << "------------ (preproblem)" << std::endl;
   if (ifpack2Precond_ != Teuchos::null) {
     ifpack2Precond_->compute();
   }
+  constexpr bool print = false;
   prob_->setProblem();
-//  std::cout << "xlen: " <<prob_->getLHS()->getNumVectors() << ", ylen: "<< prob_->getRHS()->getNumVectors()  << std::endl;
-
-//   problem vectors:
-//  std::cout << "------------ (presolve)" << std::endl;
-//  const auto x_view = prob_->getLHS()->getLocalView<HostSpace>();
-//  const auto y_view =  prob_->getRHS()->getLocalView<HostSpace>();
-//  ThrowRequire(x_view.extent_int(0) == y_view.extent_int(0));
-//  for (int k = 0; k < y_view.extent_int(0); ++k) {
-//    std::cout << k << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k,1) << ", "  << y_view(k,2)<<")" << std::endl;
-//  }
-//  std::cout << "------------ (solve)" << std::endl;
+  if (print) {
+    std::cout << "xlen: " <<prob_->getLHS()->getNumVectors() << ", ylen: "<< prob_->getRHS()->getNumVectors()  << std::endl;
+    std::cout << "------------ (presolve)" << std::endl;
+    const auto x_view = prob_->getLHS()->getLocalView<HostSpace>();
+    const auto y_view =  prob_->getRHS()->getLocalView<HostSpace>();
+    ThrowRequire(x_view.extent_int(0) == y_view.extent_int(0));
+    for (int k = 0; k < y_view.extent_int(0); ++k) {
+      std::cout << k << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k,1) << ", "  << y_view(k,2)<<")" << std::endl;
+    }
+    std::cout << "------------ (solve)" << std::endl;
+  }
   solv_->solve();
-//  std::cout << "------------ (postsolve)"  << std::endl;
-//  for (int k = 0; k < y_view.extent_int(0); ++k) {
-//    std::cout << k << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k,1) << ", "  << y_view(k,2)<<")" << std::endl;
-//  }
-//  std::cout << "------------" << std::endl;
+  if (print) {
+    std::cout << "------------ (postsolve)"  << std::endl;
+    const auto x_view = prob_->getLHS()->getLocalView<HostSpace>();
+    const auto y_view =  prob_->getRHS()->getLocalView<HostSpace>();
+    for (int k = 0; k < y_view.extent_int(0); ++k) {
+      std::cout << k << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k,1) << ", "  << y_view(k,2)<<")" << std::endl;
+    }
+    std::cout << "------------" << std::endl;
+  }
 }
 
 int TpetraMatrixFreeSolver::iteration_count() { return solv_->getNumIters(); }

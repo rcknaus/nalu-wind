@@ -8,6 +8,7 @@
 #include "CVFEMTypeDefs.h"
 
 #include "MatrixFreeTypes.h"
+#include "MatrixFreeTraits.h"
 
 #include "kernel/MomentumKernel.h"
 #include "TpetraLinearSystem.h"
@@ -67,10 +68,10 @@ void MomentumInteriorDiagonal<p>::compute_diagonal()
     }
   }
 }
-template class MomentumInteriorDiagonal<1>;
-template class MomentumInteriorDiagonal<2>;
-template class MomentumInteriorDiagonal<3>;
-template class MomentumInteriorDiagonal<4>;
+template class MomentumInteriorDiagonal<POLY1>;
+template class MomentumInteriorDiagonal<POLY2>;
+template class MomentumInteriorDiagonal<POLY3>;
+template class MomentumInteriorDiagonal<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

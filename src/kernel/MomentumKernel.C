@@ -12,6 +12,8 @@
 #include <CVFEMTypeDefs.h>
 #include <master_element/DirectionMacros.h>
 
+#include "MatrixFreeTraits.h"
+
 #include <master_element/Hex8GeometryFunctions.h>
 #include <kernel/TensorProductCVFEMMomentumBDF2TimeDerivative.h>
 #include <kernel/TensorProductCVFEMDiffusion.h>
@@ -144,10 +146,10 @@ template <int p> nodal_scalar_array<DoubleType, p> momentum_element_residual<p>:
   }
   return diag;
 }
-template class momentum_element_residual<1>;
-template class momentum_element_residual<2>;
-template class momentum_element_residual<3>;
-template class momentum_element_residual<4>;
+template class momentum_element_residual<POLY1>;
+template class momentum_element_residual<POLY2>;
+template class momentum_element_residual<POLY3>;
+template class momentum_element_residual<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

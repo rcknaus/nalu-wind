@@ -73,7 +73,7 @@ template <int p> nodal_scalar_array<DoubleType, p> png_element_residual<p>::lhs_
 {
   static const auto ops = CVFEMOperators<p>();
 
-  bool lumped = true;
+  constexpr bool lumped = false;
   const auto& weights = (lumped) ? ops.mat_.nodalWeights : ops.mat_.lumpedNodalWeights;
 
   constexpr int n1D = p + 1;

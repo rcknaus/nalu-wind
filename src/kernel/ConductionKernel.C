@@ -12,6 +12,8 @@
 #include <CVFEMTypeDefs.h>
 #include <master_element/DirectionMacros.h>
 
+#include "MatrixFreeTraits.h"
+
 #include <master_element/Hex8GeometryFunctions.h>
 #include <kernel/TensorProductCVFEMScalarBDF2TimeDerivative.h>
 #include <kernel/TensorProductCVFEMDiffusion.h>
@@ -93,14 +95,11 @@ conduction_element_residual<p>::lhs_diagonal(
   }
   return diag;
 }
+template class conduction_element_residual<POLY1>;
+template class conduction_element_residual<POLY2>;
+template class conduction_element_residual<POLY3>;
+template class conduction_element_residual<POLY4>;
 
-template class conduction_element_residual<2>;
-template class conduction_element_residual<3>;
-template class conduction_element_residual<4>;
-
-//simplify some of the p = 1 terms
-template class conduction_element_residual<1>;
-//#define SPECIALIZE_CONDUCTION_P1
 #ifdef SPECIALIZE_CONDUCTION_P1
 template <> nodal_scalar_array<DoubleType, 1>
 conduction_element_residual<1>::rhs(int index,

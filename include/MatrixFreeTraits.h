@@ -22,7 +22,7 @@ namespace nalu {
 
 struct MF {
   static constexpr bool doMatrixFree = true;
-  static constexpr int p = POLY1;
+  static constexpr int p = POLY4;
 };
 
 } // namespace nalu

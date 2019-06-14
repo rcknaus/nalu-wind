@@ -8,6 +8,8 @@
 #include "CVFEMTypeDefs.h"
 
 #include "MatrixFreeTypes.h"
+#include "MatrixFreeTraits.h"
+
 
 #include "kernel/ConductionKernel.h"
 #include "TpetraLinearSystem.h"
@@ -57,10 +59,10 @@ void ConductionInteriorDiagonal<p>::compute_diagonal()
     }
   }
 }
-template class ConductionInteriorDiagonal<1>;
-template class ConductionInteriorDiagonal<2>;
-template class ConductionInteriorDiagonal<3>;
-template class ConductionInteriorDiagonal<4>;
+template class ConductionInteriorDiagonal<POLY1>;
+template class ConductionInteriorDiagonal<POLY2>;
+template class ConductionInteriorDiagonal<POLY3>;
+template class ConductionInteriorDiagonal<POLY4>;
 
 } // namespace nalu
 } // namespace Sierra

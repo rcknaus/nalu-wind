@@ -32,7 +32,7 @@ ProjectedNodalGradientInteriorOperator(const stk::mesh::BulkData& bulk,
   entityOffsets_ = element_entity_offset_to_gid_map<p>(bulk, selector, nodeOffsetMap);
   auto coordview = gather_field<p>(bulk, selector, coordField);
   volume_ = volumes<p>(coordview);
-  area_ = areas<p>(coordview);
+  area_ = area_vectors<p>(coordview);
 }
 
 void initialize(const stk::mesh::BulkData& bulk,  const stk::mesh::Selector& selector,
