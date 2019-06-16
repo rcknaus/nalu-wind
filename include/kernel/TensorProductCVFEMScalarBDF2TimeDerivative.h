@@ -44,7 +44,7 @@ void scalar_dt_lhs(
     }
   }
 }
-//--------------------------------------------------------------------------
+
 template <int p, typename Scalar>
 void density_weighted_scalar_dt_rhs(
   const CVFEMOperators<p, Scalar>& ops,
@@ -76,7 +76,7 @@ void density_weighted_scalar_dt_rhs(
   }
   ops.volume(drhoqdt, rhs);
 }
-//--------------------------------------------------------------------------
+
 template <int p, typename Scalar>
 KOKKOS_FORCEINLINE_FUNCTION void scalar_dt_rhs(
   const CVFEMOperators<p, Scalar>& ops,
@@ -126,27 +126,28 @@ void scalar_dt_rhs_linearized(
   ops.volume(v_dqdt, rhs);
 }
 
-
 template <int p, typename Scalar>
 void scalar_dt_lhs_diagonal(
   const CVFEMOperators<p, Scalar>& ops,
-  const nodal_scalar_view<p, Scalar>& vol,  const double gamma1_div_dt,
-  matrix_view<p, Scalar>& lhs)
+  const nodal_scalar_view<p, Scalar>& vol,
+  const double gamma1_div_dt,
+  nodal_scalar_view<p, Scalar>& lhs,
+  bool lumped = false)
 {
   constexpr int n1D = p + 1;
-  const auto& weight = ops.mat_.nodalWeights;
+  const auto& weight = (lumped) ? ops.mat_.lumpedNodalWeights : ops.mat_.nodalWeights;
 
   for (int n = 0; n < n1D; ++n) {
+    const auto gammaWn = gamma1_div_dt * weight(n, n);
     for (int m = 0; m < n1D; ++m) {
+      const auto gammaWnWm = gammaWn * weight(m, m);
       for (int l = 0; l < n1D; ++l) {
-        auto rowIndex = idx<n1D>(n, m, l);
-        lhs(rowIndex, rowIndex) += gamma1_div_dt * weight(n, n) * weight(m,m) * weight(l,l) * vol(n, m, l);
+        lhs(n, m, l) += gammaWnWm * weight(l, l) * vol(n, m, l);
       }
     }
   }
 }
 
-//--------------------------------------------------------------------------
 template <int p, typename Scalar>
 void density_dt_rhs(
   const CVFEMOperators<p, Scalar>& ops,

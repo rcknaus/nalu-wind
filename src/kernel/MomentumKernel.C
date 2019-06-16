@@ -50,8 +50,8 @@ momentum_element_residual<p>::residual(
     auto elem_coords = nodal_vector_view<p,DoubleType>(&coords(index,0,0,0,0));
     auto elem_visc = nodal_scalar_view<p,DoubleType>(&visc(index,0,0,0));
     auto elem_mdot = scs_scalar_view<p,DoubleType>(&mdot(index,0,0,0,0));
-    scs_vector_workview<p, ftype> work_tau_dot_a;
-    auto& tau_dot_a = work_tau_dot_a.view();
+    scs_vector_array<ftype, p> work_tau_dot_a;
+    auto tau_dot_a = la::make_view(work_tau_dot_a);
     tensor_assembly::area_weighted_face_normal_shear_stress(ops, elem_coords, elem_visc, elem_velp1, tau_dot_a);
     tensor_assembly::momentum_advdiff_rhs(ops, tau_dot_a, elem_mdot, elem_velp1, v_rhs);
   }
@@ -124,27 +124,16 @@ template <int p> nodal_scalar_array<DoubleType, p> momentum_element_residual<p>:
 {
   static const auto ops = CVFEMOperators<p>();
 
-  auto lhs = la::zero<matrix_array<ftype, p>>();
+  auto lhs = la::zero<nodal_scalar_array<ftype, p>>();
   auto v_lhs = la::make_view(lhs);
   const auto elem_mapped_area = scs_vector_view<p, ftype>(&mapped_area(index,0,0,0,0,0));
   const auto elem_mdot = scs_scalar_view<p, ftype>(&mdot(index,0,0,0,0));
 
-  tensor_assembly::scalar_advdiff_lhs(ops, elem_mdot, elem_mapped_area, v_lhs, true);
+  constexpr bool lumped = false;
+  tensor_assembly::scalar_advdiff_lhs_diagonal(ops, elem_mdot, elem_mapped_area, v_lhs, lumped);
   auto vol = nodal_scalar_view<p, ftype>(&volume(index,0,0,0));
-  tensor_assembly::scalar_dt_lhs_diagonal(ops, vol, gamma,  v_lhs);
-
-
-  constexpr int n1D = p + 1;
-  auto diag = nodal_scalar_array<ftype, p>();
-  for (int k = 0; k < n1D; ++k) {
-    for (int j = 0; j < n1D; ++j) {
-      for (int i = 0; i < n1D; ++i) {
-        const int index = idx<n1D>(k, j, i);
-        diag(k,j,i) = lhs(index, index);
-      }
-    }
-  }
-  return diag;
+  tensor_assembly::scalar_dt_lhs_diagonal(ops, vol, gamma, v_lhs, lumped);
+  return lhs;
 }
 template class momentum_element_residual<POLY1>;
 template class momentum_element_residual<POLY2>;

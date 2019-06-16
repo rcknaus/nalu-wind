@@ -353,7 +353,7 @@ void scalar_advdiff_xhat_contrib_diagonal(
   const CVFEMOperators<poly_order, Scalar>& ops,
   const scs_scalar_view<poly_order, Scalar>& mdot,
   const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  nodal_scalar_view<poly_order, Scalar>& lhs,
   bool reduced_sens)
 {
   constexpr int n1D = poly_order + 1;
@@ -361,96 +361,76 @@ void scalar_advdiff_xhat_contrib_diagonal(
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
   for (int n = 0; n < n1D; ++n) {
+    const Scalar Wn = nodalWeights(n, n);
     for (int m = 0; m < n1D; ++m) {
-      constexpr int l_minus = 0;
+      const Scalar Wm = nodalWeights(m, m);
+      const Scalar WnWm = Wn * Wm;
+      {
+        constexpr int l_minus = 0;
+        const Scalar orth = WnWm * metric(XH, n, m, l_minus, XH);
+        const Scalar adv = WnWm * mdot(XH, n, m, l_minus);
 
-      auto rowIndexMinus = idx<n1D>(n, m, l_minus);
-      for (int k = 0; k < n1D; ++k) {
-        const Scalar Wnk = nodalWeights(n, k);
+        Scalar non_orth_y = 0.0;
+        Scalar non_orth_z = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_y += Wn * nodalWeights(m, q) * mat.nodalDeriv(q, m)
+                                  * metric(XH, n, q, l_minus, YH);
+          non_orth_z += nodalWeights(n, q) * Wm * mat.nodalDeriv(q, n)
+                                  * metric(XH, q, m, l_minus, ZH);
+        }
 
-        for (int j = 0; j < n1D; ++j) {
-          const Scalar WnkWmj = Wnk * nodalWeights(m, j);
-          const Scalar orth = WnkWmj * metric(XH, k, j, l_minus, XH);
-          const Scalar adv = WnkWmj * mdot(XH, k, j, l_minus);
+        lhs(n, m, l_minus) += orth * mat.scsDeriv(l_minus, l_minus)
+                           + mat.scsInterp(l_minus, l_minus) * (-adv + non_orth_y + non_orth_z);
+      }
 
-          Scalar non_orth_y = 0.0;
-          Scalar non_orth_z = 0.0;
+      {
+        for (int l = 1; l < n1D - 1; ++l) {
+          const Scalar orthm1 = WnWm * metric(XH, n, m, l - 1, XH);
+          const Scalar orthp0 = WnWm * metric(XH, n, m, l + 0, XH);
+          const Scalar advm1 =  WnWm * mdot(XH, n, m, l - 1);
+          const Scalar advp0 =  WnWm * mdot(XH, n, m, l + 0);
+
+          Scalar non_orth_y_m1 = 0.0;
+          Scalar non_orth_y_p0 = 0.0;
+          Scalar non_orth_z_m1 = 0.0;
+          Scalar non_orth_z_p0 = 0.0;
+
           for (int q = 0; q < n1D; ++q) {
-             non_orth_y += nodalWeights(n, k) * nodalWeights(m, q) * mat.nodalDeriv(q, j)
-                      * metric(XH, k, q, l_minus, YH);
-             non_orth_z += nodalWeights(n, q) * nodalWeights(m, j) * mat.nodalDeriv(q, k)
-                      * metric(XH, q, j, l_minus, ZH);
-           }
+            const Scalar wy = Wn * nodalWeights(m, q) * mat.nodalDeriv(q, m);
+            non_orth_y_m1 += wy * metric(XH, n, q, l - 1, YH);
+            non_orth_y_p0 += wy * metric(XH, n, q, l + 0, YH);
 
-          for (int i = 0; i < n1D; ++i) {
-            lhs(rowIndexMinus, idx<n1D>(k, j, i)) += orth * mat.scsDeriv(l_minus, i)
-                          + mat.scsInterp(l_minus, i) * (-adv + non_orth_y + non_orth_z);
+            const Scalar wz = nodalWeights(n, q) * Wm * mat.nodalDeriv(q, n);
+            non_orth_z_m1 += wz * metric(XH, q, m, l - 1, ZH);
+            non_orth_z_p0 += wz * metric(XH, q, m, l + 0, ZH);
           }
+
+          const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(l - 1, l)
+                                 + mat.scsInterp(l - 1, l) * (-advm1 + non_orth_y_m1 + non_orth_z_m1);
+          const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(l + 0, l)
+                                 + mat.scsInterp(l + 0, l) * (-advp0 + non_orth_y_p0 + non_orth_z_p0);
+          lhs(n, m, l) += integrated_flux_p - integrated_flux_m;
         }
       }
 
-      for (int l = 1; l < n1D - 1; ++l) {
-        auto rowIndex = idx<n1D>(n, m, l);
-        for (int k = 0; k < n1D; ++k) {
-          const Scalar Wnk = nodalWeights(n, k);
-          for (int j = 0; j < n1D; ++j) {
-            const Scalar WnkWmj = Wnk * nodalWeights(m, j);
-            const Scalar orthm1 = WnkWmj * metric(XH, k, j, l - 1, XH);
-            const Scalar orthp0 = WnkWmj * metric(XH, k, j, l + 0, XH);
-            const Scalar advm1 =  WnkWmj * mdot(XH, k, j, l - 1);
-            const Scalar advp0 =  WnkWmj * mdot(XH, k, j, l + 0);
+      {
+        constexpr int l_plus = n1D - 1;
+        const Scalar orth = WnWm * metric(XH, n, m, l_plus - 1, XH);
+        const Scalar adv = WnWm * mdot(XH, n, m, l_plus - 1);
 
-            Scalar non_orth_y_m1 = 0.0;
-            Scalar non_orth_y_p0 = 0.0;
-            Scalar non_orth_z_m1 = 0.0;
-            Scalar non_orth_z_p0 = 0.0;
-
-            for (int q = 0; q < n1D; ++q) {
-              const Scalar wy = nodalWeights(n, k) * nodalWeights(m, q) * mat.nodalDeriv(q, j);
-              non_orth_y_m1 += wy * metric(XH, k, q, l - 1, YH);
-              non_orth_y_p0 += wy * metric(XH, k, q, l + 0, YH);
-
-              const Scalar wz = nodalWeights(n, q) * nodalWeights(m, j) * mat.nodalDeriv(q, k);
-              non_orth_z_m1 += wz * metric(XH, q, j, l - 1, ZH);
-              non_orth_z_p0 += wz * metric(XH, q, j, l + 0, ZH);
-            }
-
-            for (int i = 0; i < n1D; ++i) {
-              const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(l - 1, i)
-                                    + mat.scsInterp(l - 1, i) * (-advm1 + non_orth_y_m1 + non_orth_z_m1);
-              const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(l + 0, i)
-                                    + mat.scsInterp(l + 0, i) * (-advp0 + non_orth_y_p0 + non_orth_z_p0);
-              lhs(rowIndex, idx<n1D>(k, j, i)) += integrated_flux_p - integrated_flux_m;
-            }
-          }
+        Scalar non_orth_y = 0.0;
+        Scalar non_orth_z = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_y += Wn * nodalWeights(m, q) * mat.nodalDeriv(q, m)
+                              * metric(XH, n, q, l_plus - 1, YH);
+          non_orth_z += nodalWeights(n, q) * Wm * mat.nodalDeriv(q, n)
+                              * metric(XH, q, m, l_plus - 1, ZH);
         }
+
+        lhs(n, m, l_plus) -= orth * mat.scsDeriv(l_plus - 1, l_plus)
+                        + mat.scsInterp(l_plus - 1, l_plus) * (-adv + non_orth_y + non_orth_z);
       }
 
-      constexpr int l_plus = n1D - 1;
-      auto rowIndexPlus = idx<n1D>(n, m, l_plus);
-      for (int k = 0; k < n1D; ++k) {
-        const Scalar Wnk = nodalWeights(n, k);
-        for (int j = 0; j < n1D; ++j) {
-          const Scalar WnkWmj = Wnk * nodalWeights(m, j);
-          const Scalar orth = WnkWmj * metric(XH, k, j, l_plus - 1, XH);
-          const Scalar adv = WnkWmj * mdot(XH, k, j, l_plus - 1);
-
-
-          Scalar non_orth_y = 0.0;
-          Scalar non_orth_z = 0.0;
-          for (int q = 0; q < n1D; ++q) {
-            non_orth_y += nodalWeights(n, k) * nodalWeights(m, q) * mat.nodalDeriv(q, j)
-                      * metric(XH, k, q, l_plus - 1, YH);
-            non_orth_z += nodalWeights(n, q) * nodalWeights(m, j) * mat.nodalDeriv(q, k)
-                      * metric(XH, q, j, l_plus - 1, ZH);
-          }
-
-          for (int i = 0; i < n1D; ++i) {
-            lhs(rowIndexPlus, idx<n1D>(k, j, i)) -= orth * mat.scsDeriv(l_plus - 1, i)
-                          + mat.scsInterp(l_plus - 1, i) * (-adv + non_orth_y + non_orth_z);
-          }
-        }
-      }
     }
   }
 }
@@ -460,7 +440,7 @@ void scalar_advdiff_yhat_contrib_diagonal(
   const CVFEMOperators<poly_order, Scalar>& ops,
   const scs_scalar_view<poly_order, Scalar>& mdot,
   const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  nodal_scalar_view<poly_order, Scalar>& lhs,
   bool reduced_sens)
 {
   constexpr int n1D = poly_order + 1;
@@ -468,93 +448,75 @@ void scalar_advdiff_yhat_contrib_diagonal(
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
   for (int n = 0; n < n1D; ++n) {
+    const Scalar Wn = nodalWeights(n, n);
     for (int l = 0; l < n1D; ++l) {
-      constexpr int m_minus = 0;
-      auto rowIndexMinus = idx<n1D>(n, m_minus, l);
-      for (int k = 0; k < n1D; ++k) {
-        const Scalar Wnk = nodalWeights(n, k);
-        for (int i = 0; i < n1D; ++i) {
-          const Scalar WnkWli = Wnk * nodalWeights(l, i);
-          const Scalar orth =  WnkWli * metric(YH,k, m_minus, i, YH);
-          const Scalar adv = WnkWli * mdot(YH, k, m_minus, i);
+      const Scalar Wl = nodalWeights(l, l);
+      const Scalar WnWl = Wn * Wl;
+      {
+        constexpr int m_minus = 0;
+        const Scalar orth =  WnWl * metric(YH, n, m_minus, l, YH);
+        const Scalar adv = WnWl * mdot(YH, n, m_minus, l);
 
-          Scalar non_orth_x = 0.0;
-          Scalar non_orth_z = 0.0;
+        Scalar non_orth_x = 0.0;
+        Scalar non_orth_z = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_x += Wn * nodalWeights(l, q) * mat.nodalDeriv(q, l)
+                              * metric(YH, n, m_minus, q, XH);
+          non_orth_z += nodalWeights(n, q) * Wl * mat.nodalDeriv(q, n)
+                              * metric(YH, q, m_minus, l, ZH);
+        }
+
+        lhs(n, m_minus, l) += orth * mat.scsDeriv(m_minus,m_minus)
+                              + mat.scsInterp(m_minus, m_minus) * (-adv + non_orth_x + non_orth_z);
+      }
+
+      {
+        for (int m = 1; m < n1D - 1; ++m) {
+          const Scalar orthm1 = WnWl * metric(YH, n, m - 1, l, YH);
+          const Scalar orthp0 = WnWl * metric(YH, n, m + 0, l, YH);
+          const Scalar advm1 =  WnWl * mdot(YH, n, m - 1, l);
+          const Scalar advp0 =  WnWl * mdot(YH, n, m + 0, l);
+
+          Scalar non_orth_x_m1 = 0.0;
+          Scalar non_orth_x_p0 = 0.0;
+          Scalar non_orth_z_m1 = 0.0;
+          Scalar non_orth_z_p0 = 0.0;
+
           for (int q = 0; q < n1D; ++q) {
-            non_orth_x += nodalWeights(n, k) * nodalWeights(l, q) * mat.nodalDeriv(q, i)
-                          * metric(YH,k, m_minus, q, XH);
-            non_orth_z += nodalWeights(n, q) * nodalWeights(l, i) * mat.nodalDeriv(q, k)
-                          * metric(YH,q, m_minus, i, ZH);
+            const Scalar wx = Wn * nodalWeights(l, q) * mat.nodalDeriv(q, l);
+            non_orth_x_m1 += wx * metric(YH, n, m - 1, q, XH);
+            non_orth_x_p0 += wx * metric(YH, n, m + 0, q, XH);
+
+            const Scalar wz = nodalWeights(n, q) * Wl * mat.nodalDeriv(q, n);
+            non_orth_z_m1 += wz * metric(YH, q, m - 1, l, ZH);
+            non_orth_z_p0 += wz * metric(YH, q, m + 0, l, ZH);
           }
 
-          for (int j = 0; j < n1D; ++j) {
-            lhs(rowIndexMinus, idx<n1D>(k, j, i)) += orth * mat.scsDeriv(m_minus, j)
-                          + mat.scsInterp(m_minus, j) * (-adv + non_orth_x + non_orth_z);
-          }
+          const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(m - 1, m)
+                                + mat.scsInterp(m - 1, m) * (-advm1 + non_orth_x_m1 + non_orth_z_m1);
+          const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(m + 0, m)
+                                + mat.scsInterp(m + 0, m) * (-advp0 + non_orth_x_p0 + non_orth_z_p0);
+          lhs(n ,m, l) += integrated_flux_p - integrated_flux_m;
         }
       }
 
-      for (int m = 1; m < n1D - 1; ++m) {
-        auto rowIndex = idx<n1D>(n, m, l);
-        for (int k = 0; k < n1D; ++k) {
-          const Scalar Wnk = nodalWeights(n, k);
-          for (int i = 0; i < n1D; ++i) {
-            const Scalar WnkWli = Wnk * nodalWeights(l, i);
-            const Scalar orthm1 = WnkWli * metric(YH, k, m - 1, i, YH);
-            const Scalar orthp0 = WnkWli * metric(YH, k, m + 0, i, YH);
-            const Scalar advm1 =  WnkWli * mdot(YH, k, m - 1, i);
-            const Scalar advp0 =  WnkWli * mdot(YH, k, m + 0, i);
+      {
+        constexpr int m_plus = n1D - 1;
+        const Scalar orth = WnWl * metric(YH, n, m_plus - 1, l, YH);
+        const Scalar adv = WnWl * mdot(YH, n, m_plus - 1, l);
 
-            Scalar non_orth_x_m1 = 0.0;
-            Scalar non_orth_x_p0 = 0.0;
-            Scalar non_orth_z_m1 = 0.0;
-            Scalar non_orth_z_p0 = 0.0;
 
-            for (int q = 0; q < n1D; ++q) {
-              const Scalar wx = nodalWeights(n, k) * nodalWeights(l, q) * mat.nodalDeriv(q, i);
-              non_orth_x_m1 += wx * metric(YH, k, m - 1, q, XH);
-              non_orth_x_p0 += wx * metric(YH, k, m + 0, q, XH);
-
-              const Scalar wz = nodalWeights(n, q) * nodalWeights(l, i) * mat.nodalDeriv(q, k);
-              non_orth_z_m1 += wz * metric(YH, q, m - 1, i, ZH);
-              non_orth_z_p0 += wz * metric(YH, q, m + 0, i, ZH);
-            }
-
-            for (int j = 0; j < n1D; ++j) {
-              const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(m - 1, j)
-                            + mat.scsInterp(m - 1, j) * (-advm1 + non_orth_x_m1 + non_orth_z_m1);
-              const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(m + 0, j)
-                            + mat.scsInterp(m + 0, j) * (-advp0 + non_orth_x_p0 + non_orth_z_p0);
-              lhs(rowIndex, idx<n1D>(k, j, i)) += integrated_flux_p - integrated_flux_m;
-            }
-          }
+        Scalar non_orth_x = 0.0;
+        Scalar non_orth_z = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_x += Wn * nodalWeights(l, q) * mat.nodalDeriv(q, l)
+                              * metric(YH, n, m_plus - 1, q, XH);
+          non_orth_z += nodalWeights(n, q) * Wl * mat.nodalDeriv(q, n)
+                              * metric(YH, q, m_plus - 1, l, ZH);
         }
-      }
 
-      constexpr int m_plus = n1D - 1;
-      auto rowIndexPlus = idx<n1D>(n, m_plus, l);
-      for (int k = 0; k < n1D; ++k) {
-        const Scalar Wnk = nodalWeights(n, k);
-        for (int i = 0; i < n1D; ++i) {
-          const Scalar WnkWli = Wnk * nodalWeights(l, i);
-          const Scalar orth = WnkWli * metric(YH, k, m_plus - 1, i, YH);
-          const Scalar adv = WnkWli * mdot(YH, k, m_plus - 1, i);
-
-
-          Scalar non_orth_x = 0.0;
-          Scalar non_orth_z = 0.0;
-          for (int q = 0; q < n1D; ++q) {
-            non_orth_x += nodalWeights(n, k) * nodalWeights(l, q) * mat.nodalDeriv(q, i)
-                          * metric(YH, k, m_plus - 1, q, XH);
-            non_orth_z += nodalWeights(n, q) * nodalWeights(l, i) * mat.nodalDeriv(q, k)
-                          * metric(YH, q, m_plus - 1, i, ZH);
-          }
-
-          for (int j = 0; j < n1D; ++j) {
-            lhs(rowIndexPlus, idx<n1D>(k, j, i)) -= orth * mat.scsDeriv(m_plus - 1, j)
-                          + mat.scsInterp(m_plus - 1, j) * (-adv + non_orth_x + non_orth_z);
-          }
-        }
+        lhs(n, m_plus, l) -= orth * mat.scsDeriv(m_plus - 1, m_plus)
+                          + mat.scsInterp(m_plus - 1, m_plus) * (-adv + non_orth_x + non_orth_z);
       }
     }
   }
@@ -565,7 +527,7 @@ void scalar_advdiff_zhat_contrib_diagonal(
   const CVFEMOperators<poly_order, Scalar>& ops,
   const scs_scalar_view<poly_order, Scalar>& mdot,
   const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  nodal_scalar_view<poly_order, Scalar>& lhs,
   bool reduced_sens)
 {
   constexpr int n1D = poly_order + 1;
@@ -573,105 +535,88 @@ void scalar_advdiff_zhat_contrib_diagonal(
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
   for (int m = 0; m < n1D; ++m) {
+    const Scalar Wm = nodalWeights(m, m);
     for (int l = 0; l < n1D; ++l) {
-      constexpr int n_minus = 0;
-      auto rowIndexMinus = idx<n1D>(n_minus, m, l);
-      for (int j = 0; j < n1D; ++j) {
-        const Scalar Wmj = nodalWeights(m, j);
-        for (int i = 0; i < n1D; ++i) {
-          const Scalar WmjWli = Wmj * nodalWeights(l, i);
-          const Scalar orth = WmjWli * metric(ZH, n_minus, j, i, ZH);
-          const Scalar adv = WmjWli * mdot(ZH, n_minus, j, i);
+      const Scalar Wl = nodalWeights(l, l);
+      const Scalar WmWl = Wm * Wl;
 
-          Scalar non_orth_x = 0.0;
-          Scalar non_orth_y = 0.0;
+      {
+        constexpr int n_minus = 0;
+        const Scalar orth = WmWl * metric(ZH, n_minus, m, l, ZH);
+        const Scalar adv = WmWl * mdot(ZH, n_minus, m, l);
+
+        Scalar non_orth_x = 0.0;
+        Scalar non_orth_y = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_x += Wm * nodalWeights(l, q) * mat.nodalDeriv(q, l)
+                              * metric(ZH, n_minus, m, q, XH);
+          non_orth_y += nodalWeights(m, q) * Wl * mat.nodalDeriv(q, m)
+                              * metric(ZH, n_minus, q, l, YH);
+        }
+
+        lhs(n_minus, m, l) += orth * mat.scsDeriv(n_minus, n_minus)
+                              + mat.scsInterp(n_minus, n_minus) * (-adv + non_orth_x + non_orth_y);
+      }
+
+      {
+        for (int n = 1; n < n1D - 1; ++n) {
+          const Scalar orthm1 = WmWl * metric(ZH, n - 1, m, l, ZH);
+          const Scalar orthp0 = WmWl * metric(ZH, n + 0, m, l, ZH);
+          const Scalar advm1 = WmWl * mdot(ZH, n - 1, m,  l);
+          const Scalar advp0 = WmWl * mdot(ZH, n + 0, m,  l);
+
+          Scalar non_orth_x_m1 = 0.0;
+          Scalar non_orth_x_p0 = 0.0;
+          Scalar non_orth_y_m1 = 0.0;
+          Scalar non_orth_y_p0 = 0.0;
+
           for (int q = 0; q < n1D; ++q) {
-            non_orth_x += nodalWeights(m, j) * nodalWeights(l, q) * mat.nodalDeriv(q, i)
-                          * metric(ZH, n_minus, j, q, XH);
-            non_orth_y += nodalWeights(m, q) * nodalWeights(l, i) * mat.nodalDeriv(q, j)
-                          * metric(ZH, n_minus, q, i, YH);
+            const Scalar wx = Wm * nodalWeights(l, q) * mat.nodalDeriv(q, l);
+            non_orth_x_m1 += wx * metric(ZH, n - 1, m, q, XH);
+            non_orth_x_p0 += wx * metric(ZH, n + 0, m, q, XH);
+
+            const Scalar wy = nodalWeights(m, q) * Wl * mat.nodalDeriv(q, m);
+            non_orth_y_m1 += wy * metric(ZH, n - 1, q, l, YH);
+            non_orth_y_p0 += wy * metric(ZH, n + 0, q, l, YH);
           }
 
-          for (int k = 0; k < n1D; ++k) {
-            lhs(rowIndexMinus, idx<n1D>(k, j, i)) += orth * mat.scsDeriv(n_minus, k)
-                          + mat.scsInterp(n_minus, k) * (-adv + non_orth_x + non_orth_y);
-          }
+          const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(n - 1, n)
+                                + mat.scsInterp(n - 1, n) * (-advm1 + non_orth_x_m1 + non_orth_y_m1);
+          const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(n + 0, n)
+                                + mat.scsInterp(n + 0, n) * (-advp0 + non_orth_x_p0 + non_orth_y_p0);
+
+          lhs(n, m, l) += integrated_flux_p - integrated_flux_m;
         }
       }
 
-      for (int n = 1; n < n1D - 1; ++n) {
-        auto rowIndex = idx<n1D>(n, m, l);
-        for (int j = 0; j < n1D; ++j) {
-          const Scalar Wmj = nodalWeights(m, j);
-          for (int i = 0; i < n1D; ++i) {
-            const Scalar WmjWli = Wmj * nodalWeights(l, i);
-            const Scalar orthm1 = WmjWli * metric(ZH, n - 1, j, i, ZH);
-            const Scalar orthp0 = WmjWli * metric(ZH, n + 0, j, i, ZH);
-            const Scalar advm1 = WmjWli * mdot(ZH, n - 1, j,  i);
-            const Scalar advp0 = WmjWli * mdot(ZH, n + 0, j,  i);
+      {
+        constexpr int n_plus = n1D - 1;
 
-            Scalar non_orth_x_m1 = 0.0;
-            Scalar non_orth_x_p0 = 0.0;
-            Scalar non_orth_y_m1 = 0.0;
-            Scalar non_orth_y_p0 = 0.0;
+        const Scalar orth = WmWl * metric(ZH, n_plus - 1, m, l, ZH);
+        const Scalar adv =  WmWl * mdot(ZH, n_plus - 1, m, l);
 
-            for (int q = 0; q < n1D; ++q) {
-              const Scalar wx = nodalWeights(m, j) * nodalWeights(l, q) * mat.nodalDeriv(q, i);
-              non_orth_x_m1 += wx * metric(ZH, n - 1, j, q, XH);
-              non_orth_x_p0 += wx * metric(ZH, n + 0, j, q, XH);
-
-              const Scalar wy = nodalWeights(m, q) * nodalWeights(l, i) * mat.nodalDeriv(q, j);
-              non_orth_y_m1 += wy * metric(ZH, n - 1, q, i, YH);
-              non_orth_y_p0 += wy * metric(ZH, n + 0, q, i, YH);
-            }
-
-            for (int k = 0; k < n1D; ++k) {
-              const Scalar integrated_flux_m = orthm1 * mat.scsDeriv(n - 1, k)
-                            + mat.scsInterp(n - 1, k) * (-advm1 + non_orth_x_m1 + non_orth_y_m1);
-              const Scalar integrated_flux_p = orthp0 * mat.scsDeriv(n + 0, k)
-                            + mat.scsInterp(n + 0, k) * (-advp0 + non_orth_x_p0 + non_orth_y_p0);
-
-              lhs(rowIndex, idx<n1D>(k, j, i)) += integrated_flux_p - integrated_flux_m;
-            }
-          }
+        Scalar non_orth_x = 0.0;
+        Scalar non_orth_y = 0.0;
+        for (int q = 0; q < n1D; ++q) {
+          non_orth_x += Wm * nodalWeights(l, q) * mat.nodalDeriv(q, l)
+                          * metric(ZH, n_plus - 1, m, q, XH);
+          non_orth_y += nodalWeights(m, q) * Wl * mat.nodalDeriv(q, m)
+                          * metric(ZH, n_plus - 1, q, l, YH);
         }
-      }
 
-      constexpr int n_plus = n1D - 1;
-      auto rowIndexPlus = idx<n1D>(n_plus, m, l);
-      for (int j = 0; j < n1D; ++j) {
-        const Scalar Wmj = nodalWeights(m, j);
-        for (int i = 0; i < n1D; ++i) {
-          const Scalar WmjWli = Wmj * nodalWeights(l, i);
-          const Scalar orth = WmjWli * metric(ZH, n_plus - 1, j, i, ZH);
-          const Scalar adv =  WmjWli * mdot(ZH, n_plus - 1, j, i);
-
-          Scalar non_orth_x = 0.0;
-          Scalar non_orth_y = 0.0;
-          for (int q = 0; q < n1D; ++q) {
-            non_orth_x += nodalWeights(m, j) * nodalWeights(l, q) * mat.nodalDeriv(q, i)
-                      * metric(ZH, n_plus - 1, j, q, XH);
-            non_orth_y += nodalWeights(m, q) * nodalWeights(l, i) * mat.nodalDeriv(q, j)
-                      * metric(ZH, n_plus - 1, q, i, YH);
-          }
-
-          for (int k = 0; k < n1D; ++k) {
-            lhs(rowIndexPlus, idx<n1D>(k, j, i)) -= orth * mat.scsDeriv(n_plus - 1, k)
-                          + mat.scsInterp(n_plus - 1, k) * (-adv + non_orth_x + non_orth_y);
-          }
-        }
+        lhs(n_plus, m, l) -= orth * mat.scsDeriv(n_plus - 1, n_plus)
+                         + mat.scsInterp(n_plus - 1, n_plus) * (-adv + non_orth_x + non_orth_y);
       }
     }
   }
 }
-
 
 template <int poly_order, typename Scalar>
 void scalar_advdiff_lhs_diagonal(
   const CVFEMOperators<poly_order, Scalar>& ops,
   const scs_scalar_view<poly_order, Scalar>& mdot,
   const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  nodal_scalar_view<poly_order, Scalar>& lhs,
   bool reduced_sens = false)
 {
   scalar_advdiff_xhat_contrib_diagonal(ops, mdot, metric, lhs, reduced_sens);

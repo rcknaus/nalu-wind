@@ -78,18 +78,22 @@ conduction_element_residual<p>::lhs_diagonal(
   auto lhs = la::zero<matrix_array<ftype, p>>();
   auto v_lhs = la::make_view(lhs);
   auto metric = scs_vector_view<p, ftype>(&mapped_area(index,0,0,0,0,0));
+
+
   tensor_assembly::scalar_diffusion_lhs(ops, metric, v_lhs);
 
   auto vol = nodal_scalar_view<p, ftype>(&volume(index,0,0,0));
-  tensor_assembly::scalar_dt_lhs_diagonal(ops, vol, gamma,  v_lhs);
+  auto diag = la::zero<nodal_scalar_array<ftype, p>>();
+  auto v_diag = la::make_view(diag);
+  tensor_assembly::scalar_dt_lhs_diagonal(ops, vol, gamma,  v_diag);
 
   constexpr int n1D = p + 1;
-  auto diag = nodal_scalar_array<ftype, p>();
+
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
         const int index = idx<n1D>(k, j, i);
-        diag(k,j,i) = lhs(index, index);
+        diag(k,j,i) += lhs(index, index);
       }
     }
   }

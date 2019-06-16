@@ -68,6 +68,7 @@ public:
   void buildNodeGraph(const stk::mesh::PartVector & parts); // for nodal assembly (e.g., lumped mass and source)
   void buildNodeGraph(const stk::mesh::Selector& selector); // for nodal assembly (e.g., lumped mass and source)
   void buildSparsifiedElemToNodeGraph(const stk::mesh::Selector& selector);
+  void buildSparsifiedReducedElemToNodeGraph(const stk::mesh::Selector& selector);
   void buildFaceToNodeGraph(const stk::mesh::PartVector & parts); // face->node assembly
   void buildEdgeToNodeGraph(const stk::mesh::PartVector & parts); // edge->node assembly
   void buildElemToNodeGraph(const stk::mesh::PartVector & parts); // elem->node assembly

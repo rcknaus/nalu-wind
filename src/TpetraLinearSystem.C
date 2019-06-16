@@ -463,6 +463,94 @@ void TpetraLinearSystem::buildSparsifiedElemToNodeGraph(const stk::mesh::Selecto
   }
 }
 
+void TpetraLinearSystem::buildSparsifiedReducedElemToNodeGraph(const stk::mesh::Selector& selector)
+{
+  beginLinearSystemConstruction();
+
+  stk::mesh::MetaData & metaData = realm_.meta_data();
+
+  const stk::mesh::Selector s_owned = metaData.locally_owned_part()
+                                      & selector
+                                      & !(realm_.get_inactive_selector());
+
+
+  const int poly_order = (realm_.promotionOrder_ == 0) ? 1: realm_.promotionOrder_ ;
+  auto node_map = make_node_map_hex(poly_order);
+  stk::mesh::BucketVector const& buckets = realm_.get_buckets( stk::topology::ELEMENT_RANK, s_owned);
+  std::array<stk::mesh::Entity, 4> entities;
+  for (const auto* ib : buckets) {
+    const auto& b = *ib;
+    for (size_t k = 0u; k < b.size(); ++k ) {
+      stk::mesh::Entity const * elem_nodes = b.begin_nodes(k);
+      for (int n = 0; n < poly_order; ++n) {
+        for (int m = 0; m < poly_order; ++m) {
+          for (int l = 0; l < poly_order; ++l) {
+            // edge ordinal 0
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+0,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 1
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+0,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 2
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+0,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 3
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+0,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 4
+            entities[0] = elem_nodes[node_map(n+1,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 5
+            entities[0] = elem_nodes[node_map(n+1,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 6
+            entities[0] = elem_nodes[node_map(n+1,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 7
+            entities[0] = elem_nodes[node_map(n+1,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 8
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 9
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 10
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 11
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+          }
+        }
+      }
+    }
+  }
+}
+
 void TpetraLinearSystem::buildConnectedNodeGraph(stk::mesh::EntityRank rank,
                                                  const stk::mesh::PartVector& parts)
 {

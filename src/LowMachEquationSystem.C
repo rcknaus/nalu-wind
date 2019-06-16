@@ -2740,7 +2740,7 @@ MomentumEquationSystem::initialize()
 {
   if (MF::doMatrixFree) {
     auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
-    tpetralinsys.buildSparsifiedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
+    tpetralinsys.buildSparsifiedReducedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
     linsys_->finalizeLinearSystem();
     const double dt = realm_.get_time_step();
     const double gamma1 = realm_.get_gamma1();
