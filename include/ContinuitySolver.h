@@ -10,7 +10,6 @@
 
 #include "Realm.h"
 #include "LowMachEquationSystem.h"
-#include "MomentumInteriorOperator.h"
 #include "TpetraLinearSystem.h"
 #include "MatrixFreeOperator.h"
 #include "TpetraMatrixFreeSolver.h"

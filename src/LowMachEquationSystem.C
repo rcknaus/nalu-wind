@@ -205,16 +205,6 @@
 
 #include "MomentumSolver.h"
 #include "ContinuitySolver.h"
-#include "MomentumInteriorOperator.h"
-#include "TpetraLinearSystem.h"
-#include "MatrixFreeOperator.h"
-#include "TpetraMatrixFreeSolver.h"
-#include "MatrixFreeTypes.h"
-#include "tpetra_linsys/TpetraMeshManager.h"
-#include "ConductionInteriorOperator.h"
-#include "ContinuityInteriorOperator.h"
-#include "SparsifiedLaplacian.h"
-#include "MomentumDiagonal.h"
 
 // deprecated
 #include <ContinuityMassElemSuppAlgDep.h>
