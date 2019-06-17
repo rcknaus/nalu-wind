@@ -5,8 +5,8 @@
 /*  directory structure                                                   */
 /*------------------------------------------------------------------------*/
 
-#ifndef ConductionDiagonal_h
-#define ConductionIDiagonal_h
+#ifndef SparsifiedLaplacian_h
+#define SparsifiedLaplacian_h
 
 #include "SimdFieldGather.h"
 #include "CVFEMMappedAreas.h"

@@ -6,7 +6,7 @@
 /*------------------------------------------------------------------------*/
 
 #ifndef ContinuityInteriorOperator_h
-#define ConductionInteriorOperator_h
+#define ContinuityInteriorOperator_h
 
 #include "SimdFieldGather.h"
 #include "CVFEMMappedAreas.h"
