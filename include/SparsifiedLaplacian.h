@@ -44,7 +44,6 @@ private:
 
   ko::vector_view<p> coords_;
   elem_entity_view_t<p> entities_;
-
 };
 
 } // namespace nalu
