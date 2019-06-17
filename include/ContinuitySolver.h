@@ -5,8 +5,8 @@
 /*  directory structure                                                   */
 /*------------------------------------------------------------------------*/
 
-#ifndef MomentumSolver_h
-#define MomentumSolver_h
+#ifndef ContinuitySolver_h
+#define ContinuitySolver_h
 
 #include "Realm.h"
 #include "LowMachEquationSystem.h"
@@ -23,15 +23,13 @@
 
 namespace sierra { namespace nalu {
 
-template <int p> class MomentumSolver
-{
+template <int p> class ContinuitySolver {
 public:
-  using mfop_type = MFOperatorParallel<MomentumInteriorOperator<p>, NoOperator>;
+  using mfop_type = MFOperatorParallel<ContinuityInteriorOperator<p>, NoOperator>;
 
-  static constexpr bool precondition = false;
+  static constexpr bool precondition = true;
 
-
-  MomentumSolver(MomentumEquationSystem& eqSys) : eqSys_(eqSys) {}
+  ContinuitySolver(ContinuityEquationSystem& eqSys) : eqSys_(eqSys) {}
 
   void create()
   {
@@ -39,9 +37,11 @@ public:
     auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(eqSys_.linsys_);
     auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
     auto& bulk = realm.bulk_data();
+    auto& meta = realm.meta_data();
     auto entToLid = tpetralinsys.entityToLID_;
 
-    mfInterior_ = make_rcp<MomentumInteriorOperator<p>>(bulk, selector, *eqSys_.coordinates_, entToLid);
+    auto& coordField = *meta.get_field<VectorFieldType>(stk::topology::NODE_RANK,  "coordinates");
+    mfInterior_ = make_rcp<ContinuityInteriorOperator<p>>(bulk, selector, coordField, entToLid);
     mfBdry_ = make_rcp<NoOperator>();
 
     mfOp_ = make_rcp<mfop_type>(
@@ -52,62 +52,49 @@ public:
       tpetralinsys.ownedRowsMap_,
       tpetralinsys.sharedNotOwnedRowsMap_,
       tpetralinsys.sharedAndOwnedRowsMap_,
-      3
+      1
     );
-    mfProb_ = make_rcp<MatrixFreeProblem>(mfOp_, 3);
+    mfProb_ = make_rcp<MatrixFreeProblem>(mfOp_, 1);
     auto sln = mfProb_->sln;
     auto rhs = mfProb_->rhs;
-    solver_ = make_rcp<TpetraMatrixFreeSolver>(3);
+    solver_ = make_rcp<TpetraMatrixFreeSolver>(1);
     if (precondition) {
-      mfDiag_ = make_rcp<MomentumInteriorDiagonal<p>>(bulk, selector, tpetralinsys, *eqSys_.coordinates_);
-      solver_->create_ifpack2_preconditioner(tpetralinsys.ownedMatrix_);
+      mfSparse_ = make_rcp<SparsifiedLaplacianInterior<p>>(bulk, selector, tpetralinsys, coordField);
+      tpetralinsys.zeroSystem();
+      mfSparse_->compute_lhs_simd();
+      tpetralinsys.loadComplete();
+      auto coordMV = make_rcp<mv_type>(sln->getMap(), 3);
+      tpetralinsys.copy_stk_to_tpetra(&coordField, coordMV);
+      solver_->create_muelu_preconditioner(tpetralinsys.ownedMatrix_, coordMV);
     }
-
     solver_->create_problem(*mfProb_);
     solver_->set_tolerance(1.0e-4);
     solver_->set_max_iteration_count(100);
     solver_->create_solver();
   }
 
-  void initialize()
+  void assemble()
   {
     auto& realm = eqSys_.realm_;
     auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
     auto& bulk = realm.bulk_data();
     mfInterior_->initialize(bulk, selector);
+    mfInterior_->set_projected_timescale(realm.get_time_step()/realm.get_gamma1());
+    compute_mdot();
+    mfOp_->compute_rhs(*mfProb_->rhs);
   }
 
-  void assemble(ko::scs_scalar_view<p> mdot)
+  void compute_mdot()
   {
     auto& realm = eqSys_.realm_;
-    auto selector  = stk::mesh::selectUnion(realm.interiorPartVec_);
-    auto& bulk = realm.bulk_data();
-
-    mfInterior_->update_element_views(bulk, selector);
-
-    mfInterior_->set_gamma({{
-      realm.get_gamma1()/realm.get_time_step(),
-      realm.get_gamma2()/realm.get_time_step(),
-      realm.get_gamma3()/realm.get_time_step()
-    }});
-
-    mfInterior_->set_mdot(mdot);
-    mfOp_->compute_rhs(*mfProb_->rhs);
-
-    if (precondition) {
-      auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(eqSys_.linsys_);
-      mfDiag_->set_gamma(realm.get_gamma1()/realm.get_time_step());
-      mfDiag_->set_mdot(mfInterior_->mdot_);
-      tpetralinsys.zeroSystem();
-      mfDiag_->compute_diagonal();
-      tpetralinsys.loadComplete();
-    }
+    mfInterior_->compute_mdot(realm.get_time_step()/realm.get_gamma1());
   }
+
 
   void solve()
   {
     solver_->solve();
-    std::cout << "momentum it count: " << solver_->iteration_count() << std::endl;
+    std::cout << "continuity it count: " << solver_->iteration_count() << std::endl;
   }
 
   void update_solution()
@@ -118,15 +105,15 @@ public:
     auto& bulk = realm.bulk_data();
     auto entToLid = tpetralinsys.entityToLID_;
 
-    write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), *eqSys_.uTmp_);
+    write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), *eqSys_.pTmp_);
     if (realm.hasPeriodic_) {
-      realm.periodic_delta_solution_update(eqSys_.uTmp_, 3);
+      realm.periodic_delta_solution_update(eqSys_.pTmp_, 1);
     }
   }
-  MomentumEquationSystem& eqSys_;
-  Teuchos::RCP<MomentumInteriorOperator<p>> mfInterior_;
+  ContinuityEquationSystem& eqSys_;
+  Teuchos::RCP<ContinuityInteriorOperator<p>> mfInterior_;
   Teuchos::RCP<NoOperator> mfBdry_;
-  Teuchos::RCP<MomentumInteriorDiagonal<p>> mfDiag_;
+  Teuchos::RCP<SparsifiedLaplacianInterior<p>> mfSparse_;
   Teuchos::RCP<MatrixFreeProblem> mfProb_;
   Teuchos::RCP<mfop_type> mfOp_;
   Teuchos::RCP<TpetraMatrixFreeSolver> solver_;
