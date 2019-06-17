@@ -118,6 +118,8 @@ void TpetraMatrixFreeSolver::create_problem(MatrixFreeProblem& mfProb) {
   else if (mueluPrecond_ != Teuchos::null) {
     prob_->setRightPrec(mueluPrecond_);
   }
+  const auto& rhs = *prob_->getRHS();
+  resid_ = make_rcp<mv_type>(rhs.getMap(), rhs.getNumVectors());
 }
 
 void TpetraMatrixFreeSolver::create_solver()
@@ -135,7 +137,7 @@ void TpetraMatrixFreeSolver::solve()
   }
   constexpr bool print = false;
   prob_->setProblem();
-  if (print) {
+  if (print && prob_->getRHS()->getNumVectors() == 3) {
     std::cout << "xlen: " <<prob_->getLHS()->getNumVectors() << ", ylen: "<< prob_->getRHS()->getNumVectors()  << std::endl;
     std::cout << "------------ (presolve)" << std::endl;
     const auto x_view = prob_->getLHS()->getLocalView<HostSpace>();
@@ -147,7 +149,7 @@ void TpetraMatrixFreeSolver::solve()
     std::cout << "------------ (solve)" << std::endl;
   }
   solv_->solve();
-  if (print) {
+  if (print  && prob_->getRHS()->getNumVectors() == 3) {
     std::cout << "------------ (postsolve)"  << std::endl;
     const auto x_view = prob_->getLHS()->getLocalView<HostSpace>();
     const auto y_view =  prob_->getRHS()->getLocalView<HostSpace>();
@@ -162,26 +164,25 @@ int TpetraMatrixFreeSolver::iteration_count() { return solv_->getNumIters(); }
 
 double TpetraMatrixFreeSolver::scaled_linear_residual()
 {
-//  const auto& op = *mfProb_->op;
-//  const auto& rhs = *prob_->getRHS();
-//  const auto& sln = *mfProb_->sln;
-//  mv_type resid(rhs.getMap(), rhs.getNumVectors());
-//  op.apply(sln, resid);
-//  resid.update(-1.0, rhs, 1.0);
-//  std::vector<double> residual_norms(rhs.getNumVectors());
-//  resid.norm2(residual_norms);
-//  double resid_mag = 0;
-//  for (auto norm : residual_norms) {
-//    resid_mag += norm*norm;
-//  }
-//
-//  std::vector<double> rhs_norms(rhs.getNumVectors());
-//  double rhs_mag = 0;
-//  for (auto norm : residual_norms) {
-//    rhs_mag += norm*norm;
-//  }
-//  return resid_mag / rhs_mag;
-  return 1;
+  const auto& op = *prob_->getOperator();
+  const auto& rhs = *prob_->getRHS();
+  const auto& sln = *prob_->getLHS();
+  mv_type resid(rhs.getMap(), rhs.getNumVectors());
+  op.apply(sln, resid);
+  resid.update(-1.0, rhs, 1.0);
+  std::vector<double> residual_norms(rhs.getNumVectors());
+  resid.norm2(residual_norms);
+  double resid_mag = 0;
+  for (auto norm : residual_norms) {
+    resid_mag += norm*norm;
+  }
+
+  std::vector<double> rhs_norms(rhs.getNumVectors());
+  double rhs_mag = 0;
+  for (auto norm : residual_norms) {
+    rhs_mag += norm * norm;
+  }
+  return resid_mag / rhs_mag;
 }
 
 } // namespace nalu

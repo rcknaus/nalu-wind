@@ -704,7 +704,8 @@ class MomentumSolver
 public:
   using mfop_type = MFOperatorParallel<MomentumInteriorOperator<MF::p>, NoOperator>;
 
-  static constexpr bool precondition = true;
+  static constexpr bool precondition = false;
+
 
   MomentumSolver(MomentumEquationSystem& eqSys) : eqSys_(eqSys) {}
 
@@ -819,7 +820,6 @@ public:
     coords_ = gather_field<p>(bulk, selector, coordField);
     initialize(bulk, selector);
   }
-
 
   void initialize(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector)
   {

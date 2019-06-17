@@ -78,6 +78,7 @@ public:
 //private:
 
   const int ndim_{1};
+  Teuchos::RCP<mv_type> resid_{Teuchos::null};
   Teuchos::RCP<Teuchos::ParameterList> solvParams_{Teuchos::null};
   Teuchos::RCP<Teuchos::ParameterList> precondParams_{Teuchos::null};
 

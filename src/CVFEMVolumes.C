@@ -25,7 +25,7 @@ template <int p> ko::scalar_view<p> volumes(ko::vector_view<p> coordinates)
   auto volume = ko::scalar_view<p>("volume" + std::to_string(rand()), coordinates.extent_int(0));
   for (int index  = 0; index < coordinates.extent_int(0); ++index) {
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
-    auto work_vol = LocalArray<DoubleType[p+1][p+1][p+1]>();
+    nodal_scalar_array<DoubleType, p> work_vol;
     auto vol = la::make_view(work_vol);
     high_order_metrics::compute_volume_metric_linear(ops, local_coords, vol);
 
@@ -47,10 +47,10 @@ template ko::scalar_view<POLY4> volumes<POLY4>(ko::vector_view<POLY4>);
 template <int p> ko::scalar_view<p> volumes(ko::scalar_view<p> alpha, ko::vector_view<p> coordinates)
 {
   auto ops = CVFEMOperators<p, DoubleType>();
-  auto volume = ko::scalar_view<p>("volume", coordinates.extent_int(0));
+  auto volume = ko::scalar_view<p>("volume" + std::to_string(rand()), coordinates.extent_int(0));
   for (int index  = 0; index < coordinates.extent_int(0); ++index) {
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
-    auto work_vol = LocalArray<DoubleType[p+1][p+1][p+1]>();
+    nodal_scalar_array<DoubleType, p> work_vol;
     auto vol = la::make_view(work_vol);
     high_order_metrics::compute_volume_metric_linear(ops, local_coords, vol);
 

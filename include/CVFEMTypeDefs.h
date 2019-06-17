@@ -35,6 +35,7 @@ template <int p, FieldType, typename ExecSpace> struct GlobalArrayTypeSelector {
 
 template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType::NODAL_SCALAR, ExecSpace>
 {
+  static constexpr int n1D = p + 1;
   using type = Kokkos::View<DoubleType*[p + 1][p + 1][p + 1],
       typename ViewTraits<ExecSpace>::layout,
       typename ViewTraits<ExecSpace>::memory_space,
@@ -43,7 +44,8 @@ template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType
 
 template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType::NODAL_VECTOR, ExecSpace>
 {
-  using type = Kokkos::View<DoubleType*[p + 1][p + 1][p + 1][3],
+  static constexpr int n1D = p + 1;
+  using type = Kokkos::View<DoubleType*[n1D][n1D][n1D][3],
       typename ViewTraits<ExecSpace>::layout,
       typename ViewTraits<ExecSpace>::memory_space,
       typename ViewTraits<ExecSpace>::memory_traits>;
@@ -51,7 +53,9 @@ template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType
 
 template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType::SCS_SCALAR, ExecSpace>
 {
-  using type = Kokkos::View<DoubleType*[3][p + 1][p + 1][p + 1],
+  static constexpr int n1D = p + 1;
+
+  using type = Kokkos::View<DoubleType*[3][n1D][n1D][n1D],
       typename ViewTraits<ExecSpace>::layout,
       typename ViewTraits<ExecSpace>::memory_space,
       typename ViewTraits<ExecSpace>::memory_traits>;
@@ -59,7 +63,9 @@ template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType
 
 template <int p, typename ExecSpace> struct GlobalArrayTypeSelector<p, FieldType::SCS_VECTOR, ExecSpace>
 {
-  using type = Kokkos::View<DoubleType*[3][p + 1][p + 1][p + 1][3],
+  static constexpr int n1D = p + 1;
+
+  using type = Kokkos::View<DoubleType*[3][n1D][n1D][n1D][3],
       typename ViewTraits<ExecSpace>::layout,
       typename ViewTraits<ExecSpace>::memory_space,
       typename ViewTraits<ExecSpace>::memory_traits>;
@@ -96,20 +102,6 @@ template <int p> struct elem_entity_view
 template <int p> using elem_entity_view_t = typename elem_entity_view<p>::type;
 
 
-template <typename Scalar, int p> using nodal_scalar_array = LocalArray<Scalar[p+1][p+1][p+1]>;
-template <typename Scalar, int p> using nodal_vector_array = LocalArray<Scalar[p+1][p+1][p+1][3]>;
-template <typename Scalar, int p> using nodal_tensor_array = LocalArray<Scalar[p+1][p+1][p+1][3][3]>;
-template <typename Scalar, int p> using scs_scalar_array = LocalArray<Scalar[3][p+1][p+1][p+1]>;
-template <typename Scalar, int p> using scs_vector_array = LocalArray<Scalar[3][p+1][p+1][p+1][3]>;
-template <typename Scalar, int p> using nodal_coefficient_matrix = LocalArray<double[p+1][p+1]>;
-template <typename Scalar, int p> using linear_nodal_coefficient_matrix = LocalArray<double[2][p+1]>;
-template <typename Scalar, int p> using linear_scs_coefficient_matrix = LocalArray<double[2][p]>;
-template <typename Scalar, int p> using linear_nodal_matrix_array = LocalArray<double[2][p+1]>;
-template <typename Scalar, int p> using linear_scs_matrix_array = LocalArray<double[2][p]>;
-template <typename Scalar, int p> using scs_matrix_array = LocalArray<double[p+1][p+1]>;
-template <typename Scalar, int p> using nodal_matrix_array = LocalArray<double[p+1][p+1]>;
-template <typename Scalar, int p> using matrix_array = LocalArray<Scalar[(p+1)*(p+1)*(p+1)][(p+1)*(p+1)*(p+1)]>;
-
 template <int p, typename Scalar = DoubleType> struct CVFEMViews {
   static constexpr int n1D = p + 1;
   static constexpr int nscs = p;
@@ -119,29 +111,48 @@ template <int p, typename Scalar = DoubleType> struct CVFEMViews {
   using nodal_scalar_array = LocalArray<Scalar[n1D][n1D][n1D]>;
   using nodal_scalar_view = la::view_type<nodal_scalar_array>;
   using nodal_scalar_wsv = ScratchWorkView<nodal_scalar_array::size, nodal_scalar_view>;
-  //--------------------------------------------------------------------------
+
   using nodal_vector_array = LocalArray<Scalar[n1D][n1D][n1D][dim]>;
   using nodal_vector_view = la::view_type<nodal_vector_array>;
   using nodal_vector_wsv = ScratchWorkView<nodal_vector_array::size, nodal_vector_view>;
-  //--------------------------------------------------------------------------
+
   using nodal_tensor_array = LocalArray<Scalar[n1D][n1D][n1D][dim][dim]>;
   using nodal_tensor_view = la::view_type<nodal_tensor_array>;
   using nodal_tensor_wsv = ScratchWorkView<nodal_tensor_array::size, nodal_tensor_view>;
-  //--------------------------------------------------------------------------
+
   using scs_scalar_array = LocalArray<Scalar[dim][n1D][n1D][n1D]>;
   using scs_scalar_view = la::view_type<scs_scalar_array>;
   using scs_scalar_wsv = ScratchWorkView<scs_scalar_array::size, scs_scalar_view>;
-  //--------------------------------------------------------------------------
+
   using scs_vector_array =  LocalArray<Scalar[dim][n1D][n1D][n1D][dim]>;
   using scs_vector_view = la::view_type<scs_vector_array>;
   using scs_vector_wsv = ScratchWorkView<scs_vector_array::size, scs_vector_view>;
-  //--------------------------------------------------------------------------
+
   using matrix_array = LocalArray<Scalar[npe][npe]>;
   using matrix_view = la::view_type<matrix_array>;
-  //--------------------------------------------------------------------------
+
   using matrix_vector_array = LocalArray<Scalar[npe*dim][npe*dim]>;
   using matrix_vector_view = la::view_type<matrix_vector_array>;
+
+  using nodal_coefficient_matrix = LocalArray<Scalar[p+1][p+1]>;
+
+
+
 };
+template <typename Scalar, int p> using nodal_scalar_array = typename CVFEMViews<p,Scalar>::nodal_scalar_array;
+template <typename Scalar, int p> using nodal_vector_array = typename CVFEMViews<p,Scalar>::nodal_vector_array;
+template <typename Scalar, int p> using nodal_tensor_array = typename CVFEMViews<p,Scalar>::nodal_tensor_array;
+template <typename Scalar, int p> using scs_scalar_array = typename CVFEMViews<p,Scalar>::scs_scalar_array;
+template <typename Scalar, int p> using scs_vector_array = typename CVFEMViews<p,Scalar>::scs_vector_array;
+template <typename Scalar, int p> using nodal_coefficient_matrix = LocalArray<double[p+1][p+1]>;
+template <typename Scalar, int p> using linear_nodal_coefficient_matrix = LocalArray<double[2][p+1]>;
+template <typename Scalar, int p> using linear_scs_coefficient_matrix = LocalArray<double[2][p]>;
+template <typename Scalar, int p> using linear_nodal_matrix_array = LocalArray<double[2][p+1]>;
+template <typename Scalar, int p> using linear_scs_matrix_array = LocalArray<double[2][p]>;
+template <typename Scalar, int p> using scs_matrix_array = LocalArray<double[p+1][p+1]>;
+template <typename Scalar, int p> using nodal_matrix_array = LocalArray<double[p+1][p+1]>;
+template <typename Scalar, int p> using matrix_array = typename CVFEMViews<p,Scalar>::matrix_array;
+
 
 template <int p, typename Scalar = DoubleType>
 using nodal_scalar_view = typename CVFEMViews<p,Scalar>::nodal_scalar_view;

@@ -24,7 +24,7 @@ namespace sierra { namespace nalu {
 template <int p> ko::scs_vector_view<p> mapped_areas(ko::vector_view<p> coordinates)
 {
   auto ops = CVFEMOperators<p, DoubleType>();
-  auto mapped_area = ko::scs_vector_view<p>("mapped_area", coordinates.extent_int(0));
+  auto mapped_area = ko::scs_vector_view<p>("mapped_area" + std::to_string(rand()), coordinates.extent_int(0));
   for (int index  = 0; index < coordinates.extent_int(0); ++index) {
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
     auto work_metric = la::zero<scs_vector_array<DoubleType, p>>();
@@ -53,7 +53,7 @@ template ko::scs_vector_view<POLY4> mapped_areas<POLY4>(ko::vector_view<POLY4>);
 template <int p> ko::scs_vector_view<p> mapped_areas(ko::scalar_view<p> alpha, ko::vector_view<p> coordinates)
 {
   auto ops = CVFEMOperators<p, DoubleType>();
-  auto mapped_area = ko::scs_vector_view<p>("mapped_area", coordinates.extent_int(0));
+  auto mapped_area = ko::scs_vector_view<p>("mapped_area" + std::to_string(rand()), coordinates.extent_int(0));
   for (int index  = 0; index < coordinates.extent_int(0); ++index) {
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
     auto local_alpha = nodal_scalar_view<p, DoubleType>(&alpha(index,0,0,0));

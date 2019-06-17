@@ -41,7 +41,7 @@ momentum_element_residual<p>::residual(
 {
   static const auto ops = CVFEMOperators<p>();
 
-  auto rhs = la::zero<nodal_vector_array<DoubleType, p>>();
+  auto rhs = la::zero<nodal_vector_array<ftype, p>>();
   auto v_rhs = la::make_view(rhs);
 
   // just pass index in?

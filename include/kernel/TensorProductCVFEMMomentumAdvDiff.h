@@ -661,21 +661,24 @@ void split_momentum_advdiff_rhs(
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < nscs; ++j) {
       for (int i = 0; i < n1D; ++i) {
-        const auto grad_u_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, XH, XH)
-                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, XH, YH)
-                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, XH, ZH);
+//        NALU_ALIGNED Scalar vmetric[3] = {{
+//            metric(YH, k, j, i, XH), metric(YH, k, j, i, YH), metric(YH, k, j, i, ZH)
+//        }};
 
-        const auto grad_v_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, YH, XH)
-                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, YH, YH)
-                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, YH, ZH);
+        integrand(k, j, i, XH) = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, XH, XH)
+                               + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, XH, YH)
+                               + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, XH, ZH)
+                               - mdot(YH, k, j, i) * vel_scs(k, j, i, XH);
 
-        const auto grad_w_dot_a = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, ZH, XH)
-                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, ZH, YH)
-                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH, ZH);
+        integrand(k, j, i, YH) = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, YH, XH)
+                               + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, YH, YH)
+                               + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, YH, ZH)
+                               - mdot(YH, k, j, i) * vel_scs(k, j, i, YH);
 
-        integrand(k, j, i, XH) = grad_u_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, XH);
-        integrand(k, j, i, YH) = grad_v_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, YH);
-        integrand(k, j, i, ZH) = grad_w_dot_a - mdot(YH, k, j, i) * vel_scs(k, j, i, ZH);
+        integrand(k, j, i, ZH) = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, ZH, XH)
+                               + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, ZH, YH)
+                               + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH, ZH)
+                               - mdot(YH, k, j, i) * vel_scs(k, j, i, ZH);
       }
     }
   }

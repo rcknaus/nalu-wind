@@ -135,8 +135,8 @@ void momentum_dt_rhs_linearized(
 {
   constexpr int n1D = poly_order + 1;
 
-  nodal_vector_workview<poly_order, Scalar> work_drhoudt(0);
-  auto& drhoudt = work_drhoudt.view();
+  nodal_vector_array<Scalar, poly_order> work_drhoudt;
+  auto drhoudt = la::make_view(work_drhoudt);
 
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
@@ -161,13 +161,13 @@ void momentum_dt_rhs_linearized(
 {
   constexpr int n1D = poly_order + 1;
 
-  nodal_scalar_workview<poly_order, Scalar> work_drhoudt(0);
-  auto& drhoudt = work_drhoudt.view();
+  nodal_scalar_array<Scalar, poly_order> work_drhoudt;
+  auto drhoudt = la::make_view(work_drhoudt);
 
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
-        drhoudt(k, j, i) =  -gamma_div_dt * scaled_metric(k, j, i) * delta(k, j, i);
+        drhoudt(k, j, i) = -gamma_div_dt * scaled_metric(k, j, i) * delta(k, j, i);
       }
     }
   }

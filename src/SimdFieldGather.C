@@ -65,7 +65,7 @@ template <int p> elem_ordinal_view_t<p> element_entity_offset_to_gid_map(
 {
   auto perm = make_node_map_hex(p);
   const auto& buckets = bulk.get_buckets(stk::topology::ELEM_RANK, selector);
-  elem_ordinal_view_t<p> entityElemRowMap("elem_entity_row_map", num_simd_elements(buckets));
+  elem_ordinal_view_t<p> entityElemRowMap("elem_entity_row_map" + std::to_string(rand()), num_simd_elements(buckets));
 
   constexpr int n1D = p + 1;
   int localSimdMeshIndex = 0;
@@ -79,22 +79,21 @@ template <int p> elem_ordinal_view_t<p> element_entity_offset_to_gid_map(
       [&b, &localSimdMeshIndex, entToLidMap, perm, entityElemRowMap, simdBucketLen, bucketLen](int e) {
       const int numSimdElems = get_length_of_next_simd_group(e, bucketLen);
       for (int elemSimdIndex = 0; elemSimdIndex < simdLen; ++elemSimdIndex) {
-        if (elemSimdIndex >= numSimdElems)  {
+        if (elemSimdIndex < numSimdElems)  {
+          const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
           for (int k = 0; k < n1D; ++k) {
             for (int j = 0; j < n1D; ++j) {
               for (int i = 0; i < n1D; ++i) {
-                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i) = invalid_node_index;
+                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i) =  entToLidMap(nodes[perm(k, j, i)].local_offset());
               }
             }
           }
         }
         else {
-          const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
           for (int k = 0; k < n1D; ++k) {
             for (int j = 0; j < n1D; ++j) {
               for (int i = 0; i < n1D; ++i) {
-                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i)
-                    =  entToLidMap(nodes[perm(k, j, i)].local_offset());
+                entityElemRowMap(localSimdMeshIndex, elemSimdIndex, k, j, i) = invalid_node_index;
               }
             }
           }
@@ -116,7 +115,7 @@ template <int p> elem_entity_view_t<p> element_entity_view(
 {
   auto perm = make_node_map_hex(p);
   const auto& buckets = bulk.get_buckets(stk::topology::ELEM_RANK, selector);
-  elem_entity_view_t<p> entityElemView("elem_entity_row_map", num_simd_elements(buckets));
+  elem_entity_view_t<p> entityElemView("elem_entity_row_map" + std::to_string(rand()), num_simd_elements(buckets));
 
   constexpr int n1D = p + 1;
   int localSimdMeshIndex = 0;
@@ -129,23 +128,22 @@ template <int p> elem_entity_view_t<p> element_entity_view(
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team, simdBucketLen),
       [&b, &localSimdMeshIndex, perm, entityElemView, simdBucketLen, bucketLen](int e) {
       const int numSimdElems = get_length_of_next_simd_group(e, bucketLen);
-
       for (int elemSimdIndex = 0; elemSimdIndex < simdLen; ++elemSimdIndex) {
-        if (elemSimdIndex >= numSimdElems)  {
-          for (int k = 0; k < n1D; ++k) {
-            for (int j = 0; j < n1D; ++j) {
-              for (int i = 0; i < n1D; ++i) {
-                entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = stk::mesh::Entity();
-              }
-            }
-          }
-        }
-        else {
+        if (elemSimdIndex < numSimdElems)  {
           const auto& nodes = b.begin_nodes(bucket_index(e, elemSimdIndex));
           for (int k = 0; k < n1D; ++k) {
             for (int j = 0; j < n1D; ++j) {
               for (int i = 0; i < n1D; ++i) {
                 entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = nodes[perm(k, j, i)];
+              }
+            }
+          }
+        }
+        else {
+          for (int k = 0; k < n1D; ++k) {
+            for (int j = 0; j < n1D; ++j) {
+              for (int i = 0; i < n1D; ++i) {
+                entityElemView(localSimdMeshIndex, elemSimdIndex, k, j, i) = stk::mesh::Entity(stk::mesh::Entity::InvalidEntity);
               }
             }
           }
@@ -189,7 +187,7 @@ template <int p> ko::scalar_view<p> gather_field(const stk::mesh::BulkData& bulk
 {
   auto perm = make_node_map_hex(p);
   const auto& buckets = bulk.get_buckets(stk::topology::ELEMENT_RANK, stk::mesh::selectField(field) & selector);
-  auto scalar_field_view = ko::scalar_view<p>(field.name() + "_view", num_simd_elements(buckets));
+  auto scalar_field_view = ko::scalar_view<p>(field.name() + "_view" + std::to_string(rand()), num_simd_elements(buckets));
   iterate_buckets(buckets, [&scalar_field_view, &field, perm] (int simdElemIndex, int localSimdIndex, const stk::mesh::Entity* nodes)
   {
     for (int k = 0; k < p + 1; ++k) {
@@ -212,7 +210,7 @@ template <int p> ko::vector_view<p> gather_field(const stk::mesh::BulkData& bulk
 {
   auto perm = make_node_map_hex(p);
   const auto& buckets = bulk.get_buckets(stk::topology::ELEMENT_RANK, stk::mesh::selectField(field) & selector);
-  auto vector_field_view = ko::vector_view<p>(field.name() + "_view", num_simd_elements(buckets));
+  auto vector_field_view = ko::vector_view<p>(field.name() + "_view" + std::to_string(rand()), num_simd_elements(buckets));
   iterate_buckets(buckets, [&vector_field_view, &field, perm] (int simdElemIndex, int localSimdIndex, const stk::mesh::Entity* nodes)
   {
     for (int k = 0; k < p + 1; ++k) {

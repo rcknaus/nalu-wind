@@ -7,14 +7,13 @@
 
 #include "CVFEMCorrectedMassFlux.h"
 
+#include "MatrixFreeTraits.h"
 #include <CVFEMTypeDefs.h>
-#include <ElemDataRequests.h>
 #include <FieldTypeDef.h>
 #include <KokkosInterface.h>
 #include <SimdInterface.h>
 #include <master_element/TensorProductCVFEMDiffusionMetric.h>
 #include <master_element/TensorProductCVFEMAdvectionMetric.h>
-#include <element_promotion/NodeMapMaker.h>
 #include <stk_util/util/ReportHandler.hpp>
 
 namespace sierra { namespace nalu {
@@ -28,7 +27,7 @@ template <int p> ko::scs_scalar_view<p> corrected_mass_flux(
   ko::vector_view<p> gradP)
 {
   auto ops = CVFEMOperators<p, DoubleType>();
-  auto corrected_mass_flux = ko::scs_scalar_view<p>("corrected_mass_flux", coordinates.extent_int(0));
+  auto corrected_mass_flux = ko::scs_scalar_view<p>("corrected_mass_flux" + std::to_string(rand()), coordinates.extent_int(0));
   for (int index  = 0; index < coordinates.extent_int(0); ++index) {
     auto local_coords = nodal_vector_view<p, DoubleType>(&coordinates(index,0,0,0,0));
     auto work_metric = scs_vector_array<DoubleType, p>();
@@ -67,36 +66,36 @@ template <int p> ko::scs_scalar_view<p> corrected_mass_flux(
   return corrected_mass_flux;
 }
 
-template ko::scs_scalar_view<1> corrected_mass_flux<1>(
+template ko::scs_scalar_view<POLY1> corrected_mass_flux<POLY1>(
   double,
-  ko::vector_view<1>,
-  ko::scalar_view<1>,
-  ko::vector_view<1>,
-  ko::scalar_view<1>,
-  ko::vector_view<1>);
+  ko::vector_view<POLY1>,
+  ko::scalar_view<POLY1>,
+  ko::vector_view<POLY1>,
+  ko::scalar_view<POLY1>,
+  ko::vector_view<POLY1>);
 
-template ko::scs_scalar_view<2> corrected_mass_flux<2>(
+template ko::scs_scalar_view<POLY2> corrected_mass_flux<POLY2>(
   double,
-  ko::vector_view<2>,
-  ko::scalar_view<2>,
-  ko::vector_view<2>,
-  ko::scalar_view<2>,
-  ko::vector_view<2>);
+  ko::vector_view<POLY2>,
+  ko::scalar_view<POLY2>,
+  ko::vector_view<POLY2>,
+  ko::scalar_view<POLY2>,
+  ko::vector_view<POLY2>);
 
-template ko::scs_scalar_view<3> corrected_mass_flux<3>(
+template ko::scs_scalar_view<POLY3> corrected_mass_flux<POLY3>(
   double,
-  ko::vector_view<3>,
-  ko::scalar_view<3>,
-  ko::vector_view<3>,
-  ko::scalar_view<3>,
-  ko::vector_view<3>);
+  ko::vector_view<POLY3>,
+  ko::scalar_view<POLY3>,
+  ko::vector_view<POLY3>,
+  ko::scalar_view<POLY3>,
+  ko::vector_view<POLY3>);
 
-template ko::scs_scalar_view<4> corrected_mass_flux<4>(
+template ko::scs_scalar_view<POLY4> corrected_mass_flux<POLY4>(
   double,
-  ko::vector_view<4>,
-  ko::scalar_view<4>,
-  ko::vector_view<4>,
-  ko::scalar_view<4>,
-  ko::vector_view<4>);
+  ko::vector_view<POLY4>,
+  ko::scalar_view<POLY4>,
+  ko::vector_view<POLY4>,
+  ko::scalar_view<POLY4>,
+  ko::vector_view<POLY4>);
 
 }}
