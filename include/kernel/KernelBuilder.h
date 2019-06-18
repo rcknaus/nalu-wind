@@ -303,7 +303,7 @@ namespace nalu{
     bool solverAlgWasBuiltHO_{false};
   };
 
-   template <template <typename> class T, typename... Args>
+  template <template <typename> class T, typename... Args>
   Kernel* build_face_elem_topo_kernel(int dimension,
                                       stk::topology faceTopo, stk::topology elemTopo,
                                       Args&&... args)

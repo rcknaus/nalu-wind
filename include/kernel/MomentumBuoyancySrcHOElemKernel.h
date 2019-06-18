@@ -31,7 +31,7 @@ class TimeIntegrator;
 template<class AlgTraits>
 class MomentumBuoyancySrcHOElemKernel final : public Kernel
 {
-DeclareCVFEMTypeDefs(CVFEMViews<AlgTraits::polyOrder_>);
+static constexpr int p = AlgTraits::polyOrder_;
 public:
   MomentumBuoyancySrcHOElemKernel(
     const stk::mesh::BulkData& bulkData,
@@ -46,7 +46,7 @@ public:
 
 private:
   const double rhoRef_;
-  const std::array<double,3> gravity_;
+  const Kokkos::Array<double,3> gravity_;
 
   VectorFieldType* coordinates_{nullptr};
   ScalarFieldType* density_{nullptr};

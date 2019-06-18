@@ -19,7 +19,7 @@ namespace tensor_assembly {
 template <int poly_order, typename Scalar>
 void momentum_dt_lhs(
   const CVFEMOperators<poly_order, Scalar>& ops,
-  const nodal_scalar_view<poly_order, Scalar>& metric,
+  const nodal_scalar_view<poly_order, Scalar>& vol,
   double gamma1_div_dt,
   const nodal_scalar_view<poly_order, Scalar>& rho_p1,
   matrix_vector_view<poly_order, Scalar>& lhs)
@@ -41,7 +41,7 @@ void momentum_dt_lhs(
           for (int j = 0; j < n1D; ++j) {
             auto gammaWnkWmj = gammaWnk * weight(m, j);
             for (int i = 0; i < n1D; ++i) {
-              const Scalar lhsfac = gammaWnkWmj * weight(l, i) * metric(k, j, i) * rho_p1(k, j, i);
+              const Scalar lhsfac = gammaWnkWmj * weight(l, i) * vol(k, j, i) * rho_p1(k, j, i);
               lhs(rowIndices[XH], idx<n1D>(XH, k, j, i)) += lhsfac;
               lhs(rowIndices[YH], idx<n1D>(YH, k, j, i)) += lhsfac;
               lhs(rowIndices[ZH], idx<n1D>(ZH, k, j, i)) += lhsfac;
@@ -101,8 +101,8 @@ void momentum_dt_rhs(
 {
   constexpr int n1D = poly_order + 1;
 
-  nodal_vector_workview<poly_order, Scalar> work_drhoudt(0);
-  auto& drhoudt = work_drhoudt.view();
+  nodal_vector_array<Scalar, poly_order> work_drhoudt;
+  auto drhoudt = la::make_view(work_drhoudt);
 
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
@@ -122,6 +122,53 @@ void momentum_dt_rhs(
       }
     }
   }
+  ops.volume(drhoudt, rhs);
+}
+
+template <int poly_order, typename Scalar>
+void momentum_dt_rhs_linearized(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const nodal_scalar_view<poly_order, Scalar>& scaled_metric,
+  double gamma_div_dt,
+  const nodal_vector_view<poly_order, Scalar>& delta,
+  nodal_vector_view<poly_order, Scalar>& rhs)
+{
+  constexpr int n1D = poly_order + 1;
+
+  nodal_vector_array<Scalar, poly_order> work_drhoudt;
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        const Scalar local_vol = -gamma_div_dt * scaled_metric(k, j, i);
+        work_drhoudt(k, j, i, XH) = delta(k, j, i, XH) * local_vol;
+        work_drhoudt(k, j, i, YH) = delta(k, j, i, YH) * local_vol;
+        work_drhoudt(k, j, i, ZH) = delta(k, j, i, ZH) * local_vol;
+      }
+    }
+  }
+  auto drhoudt = la::make_view(work_drhoudt);
+  ops.volume(drhoudt, rhs);
+}
+
+template <int poly_order, typename Scalar>
+void momentum_dt_rhs_linearized(
+  const CVFEMOperators<poly_order, Scalar>& ops,
+  const nodal_scalar_view<poly_order, Scalar>& scaled_metric,
+  double gamma_div_dt,
+  const nodal_scalar_view<poly_order, Scalar>& delta,
+  nodal_scalar_view<poly_order, Scalar>& rhs)
+{
+  constexpr int n1D = poly_order + 1;
+
+  nodal_scalar_array<Scalar, poly_order> work_drhoudt;
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        work_drhoudt(k, j, i) = -gamma_div_dt * scaled_metric(k, j, i) * delta(k, j, i);
+      }
+    }
+  }
+  auto drhoudt = la::make_view(work_drhoudt);
   ops.volume(drhoudt, rhs);
 }
 

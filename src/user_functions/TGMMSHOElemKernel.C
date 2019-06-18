@@ -47,15 +47,11 @@ TGMMSHOElemKernel<AlgTraits>::execute(
 {
   auto v_coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
 
-  nodal_scalar_workview work_vol(0);
-  auto& v_vol = work_vol.view();
+  nodal_scalar_array<DoubleType, AlgTraits::polyOrder_> work_vol;
+  auto v_vol = la::make_view(work_vol);
   high_order_metrics::compute_volume_metric_linear(ops_, v_coords, v_vol);
 
-  nodal_vector_view v_rhs(rhs.data());
-
-  nodal_vector_workview work_sourceVec(0);
-  auto& sourceVec = work_sourceVec.view();
-
+  nodal_vector_array<DoubleType, AlgTraits::polyOrder_> work_sourceVec;
   for (int k = 0; k < AlgTraits::nodes1D_; ++k) {
     for (int j = 0; j < AlgTraits::nodes1D_; ++j) {
       for (int i = 0; i <AlgTraits::nodes1D_; ++i) {
@@ -64,21 +60,23 @@ TGMMSHOElemKernel<AlgTraits>::execute(
         const auto z = v_coords(k,j, i, ZH);
         const auto mu = visc_;
 
-        sourceVec(k,j,i,XH) = (-(M_PI*(1 + stk::math::cos(4*M_PI*y) - 2*stk::math::cos(4*M_PI*z))*stk::math::sin(4*M_PI*x))/8.
+        work_sourceVec(k,j,i,XH) = (-(M_PI*(1 + stk::math::cos(4*M_PI*y) - 2*stk::math::cos(4*M_PI*z))*stk::math::sin(4*M_PI*x))/8.
             + 6*mu*(M_PI * M_PI)*stk::math::cos(2*M_PI*x)*stk::math::sin(2*M_PI*y)*stk::math::sin(2*M_PI*z));
 
-        sourceVec(k,j,i,YH) = (M_PI*((-2 + stk::math::cos(4*M_PI*x) + stk::math::cos(4*M_PI*z))*stk::math::sin(4*M_PI*y)
+        work_sourceVec(k,j,i,YH) = (M_PI*((-2 + stk::math::cos(4*M_PI*x) + stk::math::cos(4*M_PI*z))*stk::math::sin(4*M_PI*y)
             - 48*mu*M_PI*stk::math::cos(2*M_PI*y)*stk::math::sin(2*M_PI*x)*stk::math::sin(2*M_PI*z)))/4.;
 
-        sourceVec(k,j,i,ZH) = (M_PI*(24*mu*M_PI*stk::math::cos(2*M_PI*z)*stk::math::sin(2*M_PI*x)*stk::math::sin(2*M_PI*y)
+        work_sourceVec(k,j,i,ZH) = (M_PI*(24*mu*M_PI*stk::math::cos(2*M_PI*z)*stk::math::sin(2*M_PI*x)*stk::math::sin(2*M_PI*y)
             + (stk::math::cos(4*M_PI*x) - (stk::math::cos(2*M_PI*y) * stk::math::cos(2*M_PI*y)))*stk::math::sin(4*M_PI*z)))/4.;
 
         for (int d = 0; d < 3; ++d) {
-          sourceVec(k,j,i,d) *= v_vol(k,j,i);
+          work_sourceVec(k,j,i,d) *= v_vol(k,j,i);
         }
       }
     }
   }
+  nodal_vector_view v_rhs(rhs.data());
+  auto sourceVec = la::make_view(work_sourceVec);
   ops_.volume(sourceVec, v_rhs);
 }
 

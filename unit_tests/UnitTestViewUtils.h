@@ -14,7 +14,7 @@ void dump_2d_view(const T& v, bool clipzero = true)
   for (unsigned j = 0; j < v.extent(1); ++j) {
     for (unsigned i = 0; i < v.extent(0); ++i) {
       double vout = (std::abs(v(j,i)) < 1.0e-15  && clipzero) ? 0.0 : v(j,i);
-      std::cout << "(" << i << ", " << j << ")" << ", " << std::setw(5) << v.label() << ": " << std::setw(12) << vout;
+      std::cout << std::setprecision(100) << "(" << i << ", " << j << ")" << ", " << std::setw(5) << "x1" << ": " << std::setw(12) << vout;
       if (i != v.extent(0)-1) { std::cout << ", "; }
     }
     std::cout << std::endl;

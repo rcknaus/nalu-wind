@@ -22,6 +22,8 @@
 #include <utils/StkHelpers.h>
 #include <utils/CreateDeviceExpression.h>
 
+#include "element_promotion/NodeMapMaker.h"
+
 #include <KokkosInterface.h>
 
 // overset
@@ -318,10 +320,13 @@ TpetraLinearSystem::beginLinearSystemConstruction()
     }
   }
   
+  std::vector<GlobalOrdinal> sharedAndOwnedGids = ownedGids;
+  sharedAndOwnedGids.insert(sharedAndOwnedGids.end(), sharedNotOwnedGids.begin(), sharedNotOwnedGids.end());
+
   const Teuchos::RCP<LinSys::Comm> tpetraComm = Teuchos::rcp(new LinSys::Comm(bulkData.parallel()));
   ownedRowsMap_ = Teuchos::rcp(new LinSys::Map(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), ownedGids, 1, tpetraComm));
   sharedNotOwnedRowsMap_ = Teuchos::rcp(new LinSys::Map(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), sharedNotOwnedGids, 1, tpetraComm));
-
+  sharedAndOwnedRowsMap_ = Teuchos::rcp(new LinSys::Map(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(), sharedAndOwnedGids, 1, tpetraComm));
   exporter_ = Teuchos::rcp(new LinSys::Export(sharedNotOwnedRowsMap_, ownedRowsMap_));
 
   fill_entity_to_row_LID_mapping();
@@ -392,6 +397,156 @@ TpetraLinearSystem::buildNodeGraph(const stk::mesh::PartVector & parts)
     for ( stk::mesh::Bucket::size_type k = 0 ; k < length ; ++k ) {
       stk::mesh::Entity node = b[k];
       addConnections(&node, 1);
+    }
+  }
+}
+
+void
+TpetraLinearSystem::buildNodeGraph(const stk::mesh::Selector& selector)
+{
+  beginLinearSystemConstruction();
+  stk::mesh::MetaData & metaData = realm_.meta_data();
+
+  const stk::mesh::Selector s_owned = metaData.locally_owned_part()
+    & selector
+    & !(stk::mesh::selectUnion(realm_.get_slave_part_vector()))
+    & !(realm_.get_inactive_selector());
+
+  stk::mesh::BucketVector const& buckets =
+    realm_.get_buckets( stk::topology::NODE_RANK, s_owned );
+  for(size_t ib=0; ib<buckets.size(); ++ib) {
+    const stk::mesh::Bucket & b = *buckets[ib];
+    const stk::mesh::Bucket::size_type length   = b.size();
+    for ( stk::mesh::Bucket::size_type k = 0 ; k < length ; ++k ) {
+      stk::mesh::Entity node = b[k];
+      addConnections(&node, 1);
+    }
+  }
+}
+
+void TpetraLinearSystem::buildSparsifiedElemToNodeGraph(const stk::mesh::Selector& selector)
+{
+  beginLinearSystemConstruction();
+
+
+  stk::mesh::MetaData & metaData = realm_.meta_data();
+
+  const stk::mesh::Selector s_owned = metaData.locally_owned_part()
+                                      & selector
+                                      & !(realm_.get_inactive_selector());
+
+  const int poly_order = (realm_.promotionOrder_ == 0) ? 1: realm_.promotionOrder_ ;
+  auto node_map = make_node_map_hex(poly_order);
+  stk::mesh::BucketVector const& buckets = realm_.get_buckets( stk::topology::ELEMENT_RANK, s_owned);
+  std::vector<stk::mesh::Entity> entities(8);
+  for (const auto* ib : buckets) {
+    const auto& b = *ib;
+    for (size_t k = 0u; k < b.size(); ++k ) {
+      stk::mesh::Entity const * elem_nodes = b.begin_nodes(k);
+      for (int n = 0; n < poly_order; ++n) {
+        for (int m = 0; m < poly_order; ++m) {
+          for (int l = 0; l < poly_order; ++l) {
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+0,m+0,l+1)];
+            entities[2] = elem_nodes[node_map(n+0,m+1,l+1)];
+            entities[3] = elem_nodes[node_map(n+0,m+1,l+0)];
+
+            entities[4] = elem_nodes[node_map(n+1,m+0,l+0)];
+            entities[5] = elem_nodes[node_map(n+1,m+0,l+1)];
+            entities[6] = elem_nodes[node_map(n+1,m+1,l+1)];
+            entities[7] = elem_nodes[node_map(n+1,m+1,l+0)];
+            addConnections(entities.data(), 8u);
+          }
+        }
+      }
+    }
+  }
+}
+
+void TpetraLinearSystem::buildSparsifiedReducedElemToNodeGraph(const stk::mesh::Selector& selector)
+{
+  beginLinearSystemConstruction();
+
+  stk::mesh::MetaData & metaData = realm_.meta_data();
+
+  const stk::mesh::Selector s_owned = metaData.locally_owned_part()
+                                      & selector
+                                      & !(realm_.get_inactive_selector());
+
+
+  const int poly_order = (realm_.promotionOrder_ == 0) ? 1: realm_.promotionOrder_ ;
+  auto node_map = make_node_map_hex(poly_order);
+  stk::mesh::BucketVector const& buckets = realm_.get_buckets( stk::topology::ELEMENT_RANK, s_owned);
+  std::array<stk::mesh::Entity, 4> entities;
+  for (const auto* ib : buckets) {
+    const auto& b = *ib;
+    for (size_t k = 0u; k < b.size(); ++k ) {
+      stk::mesh::Entity const * elem_nodes = b.begin_nodes(k);
+      for (int n = 0; n < poly_order; ++n) {
+        for (int m = 0; m < poly_order; ++m) {
+          for (int l = 0; l < poly_order; ++l) {
+            // edge ordinal 0
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+0,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 1
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+0,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 2
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+0,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 3
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+0,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 4
+            entities[0] = elem_nodes[node_map(n+1,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 5
+            entities[0] = elem_nodes[node_map(n+1,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 6
+            entities[0] = elem_nodes[node_map(n+1,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 7
+            entities[0] = elem_nodes[node_map(n+1,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 8
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+0)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 9
+            entities[0] = elem_nodes[node_map(n+0,m+0,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+0,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 10
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+1)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+1)];
+            addConnections(entities.data(), 2u);
+
+            // edge ordinal 11
+            entities[0] = elem_nodes[node_map(n+0,m+1,l+0)];
+            entities[1] = elem_nodes[node_map(n+1,m+1,l+0)];
+            addConnections(entities.data(), 2u);
+          }
+        }
+      }
     }
   }
 }
@@ -1640,6 +1795,44 @@ sierra::nalu::CoeffApplier* TpetraLinearSystem::TpetraLinSysCoeffApplier::device
   return devicePointer_;
 }
 
+void TpetraLinearSystem::sumIntoNode(stk::mesh::Entity node, double lhs, double rhs)
+{
+  constexpr bool forceAtomic = false;
+  const auto rowLid = entityToLID_[node.local_offset()];
+  if (rowLid >= maxSharedNotOwnedRowId_) {
+    return; // should I abort instead?
+  }
+
+  {
+    auto row_view = (rowLid < maxOwnedRowId_) ? ownedLocalMatrix_.row(rowLid)
+        : sharedNotOwnedLocalMatrix_.row(rowLid - maxOwnedRowId_);
+
+    const auto length = row_view.length;
+    int offset = 0;
+    const auto colLid = entityToColLID_[node.local_offset()];
+    while (row_view.colidx(offset) != colLid && offset < length) {
+      ++offset;
+    }
+
+    if (offset < length) {
+      if (forceAtomic) {
+        Kokkos::atomic_add(&(row_view.value(offset)), lhs);
+      }
+      else {
+        row_view.value(offset) += lhs;
+      }
+    }
+  }
+
+  if (rowLid < maxOwnedRowId_) {
+    ownedLocalRhs_(rowLid, 0) += rhs;
+  }
+  else {
+    sharedNotOwnedLocalRhs_(rowLid-maxOwnedRowId_, 0) += rhs;
+  }
+}
+
+
 void
 TpetraLinearSystem::sumInto(
   unsigned numEntities,
@@ -1982,13 +2175,7 @@ TpetraLinearSystem::solve(
   scaledNonLinearResidual_ = nonLinearResidual_/std::max(std::numeric_limits<double>::epsilon(), firstNonLinearResidual_);
 
   if ( provideOutput_ ) {
-    const int nameOffset = eqSysName_.length()+8;
-    NaluEnv::self().naluOutputP0()
-      << std::setw(nameOffset) << std::right << eqSysName_
-      << std::setw(32-nameOffset)  << std::right << iters
-      << std::setw(18) << std::right << finalResidNorm
-      << std::setw(15) << std::right << nonLinearResidual_
-      << std::setw(14) << std::right << scaledNonLinearResidual_ << std::endl;
+    eqSys_->output_banner(iters, finalResidNorm, nonLinearResidual_, scaledNonLinearResidual_);
   }
 
   eqSys_->firstTimeStepSolve_ = false;

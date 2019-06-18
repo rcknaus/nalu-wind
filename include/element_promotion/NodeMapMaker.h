@@ -16,8 +16,8 @@ namespace sierra
 namespace nalu
 {
 
-Kokkos::View<int***> make_node_map_hex(int, bool  = false);
-Kokkos::View<int***> make_inverse_node_map_hex(int, bool = false);
+Kokkos::View<int***> make_node_map_hex(int, bool = true);
+Kokkos::View<int***> make_inverse_node_map_hex(int, bool = true);
 
 Kokkos::View<int**> make_node_map_quad(int);
 

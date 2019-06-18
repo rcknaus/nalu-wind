@@ -118,9 +118,18 @@ HexNElementDescription::HexNElementDescription(std::vector<double> in_nodeLocs)
   nodesPerSubElement = nodesInBaseElement;
 
   baseEdgeConnectivity = {
-      {0,1}, {1,2}, {2,3}, {3,0}, // bottom face
-      {4,5}, {5,6}, {6,7}, {7,4}, // top face
-      {0,4}, {1,5}, {2,6}, {3,7}  // bottom-to-top
+      {0,1}, //0
+      {1,2}, //1
+      {2,3}, //2
+      {3,0}, //3 bottom face
+      {4,5}, //4
+      {5,6}, //5
+      {6,7}, //6
+      {7,4}, //7 top face
+      {0,4}, //8
+      {1,5}, //9
+      {2,6}, //10
+      {3,7}  //11 bottom-to-top
   };
 
   baseFaceConnectivity = {

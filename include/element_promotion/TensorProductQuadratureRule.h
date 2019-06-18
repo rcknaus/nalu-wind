@@ -15,7 +15,7 @@
 namespace sierra{
 namespace nalu{
 
-enum class QuadratureRuleType {MINIMUM_GAUSS = 0, DOUBLE_GAUSS = 1};
+enum class QuadratureRuleType {MINIMUM_GAUSS = 0, DOUBLE_GAUSS = 1, ONE_POINT_PER_SCV = 2};
 
 class TensorProductQuadratureRule
 {

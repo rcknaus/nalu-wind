@@ -65,28 +65,26 @@ MomentumBuoyancySrcHOElemKernel<AlgTraits>::execute(
   SharedMemView<DoubleType*>& rhs,
   ScratchViewsHO<DoubleType>& scratchViews)
 {
-  auto coords = scratchViews.get_scratch_view<nodal_vector_view>(*coordinates_);
-  nodal_scalar_workview l_vol(0);
-  auto& vol = l_vol.view();
+  auto coords = scratchViews.get_scratch_view<nodal_vector_view<p, DoubleType>>(*coordinates_);
+  nodal_scalar_array<DoubleType, p> l_vol;
+  auto vol = la::make_view(l_vol);
   high_order_metrics::compute_volume_metric_linear(ops_, coords, vol);
 
-  auto rho = scratchViews.get_scratch_view<nodal_scalar_view>(*density_);
-
-  nodal_vector_workview work_buoyancy_src;
-  auto& buoyancy_src = work_buoyancy_src.view();
-
+  auto rho = scratchViews.get_scratch_view<nodal_scalar_view<p, DoubleType>>(*density_);
+  nodal_vector_array<DoubleType, p> work_buoyancy_src;
   for (int k = 0; k < AlgTraits::nodes1D_; ++k) {
     for (int j = 0; j < AlgTraits::nodes1D_; ++j) {
       for (int i = 0; i < AlgTraits::nodes1D_; ++i) {
         const DoubleType deltaRhoVol = (rho(k, j, i) - rhoRef_) * vol(k, j, i);
         for (int d = 0; d < 3; ++d) {
-          buoyancy_src(k, j, i, d) = gravity_[d] * deltaRhoVol;
+          work_buoyancy_src(k, j, i, d) = gravity_[d] * deltaRhoVol;
         }
       }
     }
   }
 
-  nodal_vector_view v_rhs(rhs.data());
+  nodal_vector_view<p, DoubleType> v_rhs(rhs.data());
+  auto buoyancy_src = la::make_view(work_buoyancy_src);
   ops_.volume(buoyancy_src, v_rhs);
 }
 

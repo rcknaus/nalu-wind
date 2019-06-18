@@ -66,6 +66,9 @@ public:
 
    // Graph/Matrix Construction
   void buildNodeGraph(const stk::mesh::PartVector & parts); // for nodal assembly (e.g., lumped mass and source)
+  void buildNodeGraph(const stk::mesh::Selector& selector); // for nodal assembly (e.g., lumped mass and source)
+  void buildSparsifiedElemToNodeGraph(const stk::mesh::Selector& selector);
+  void buildSparsifiedReducedElemToNodeGraph(const stk::mesh::Selector& selector);
   void buildFaceToNodeGraph(const stk::mesh::PartVector & parts); // face->node assembly
   void buildEdgeToNodeGraph(const stk::mesh::PartVector & parts); // edge->node assembly
   void buildElemToNodeGraph(const stk::mesh::PartVector & parts); // elem->node assembly
@@ -75,6 +78,8 @@ public:
   void buildOversetNodeGraph(const stk::mesh::PartVector & parts); // overset->elem_node assembly
   void storeOwnersForShared();
   void finalizeLinearSystem();
+
+  void sumIntoNode(stk::mesh::Entity node, double lhs, double rhs);
 
   sierra::nalu::CoeffApplier* get_coeff_applier();
 
@@ -200,7 +205,7 @@ public:
     TpetraLinSysCoeffApplier* devicePointer_;
   };
 
-private:
+//private:
   void buildConnectedNodeGraph(stk::mesh::EntityRank rank,
                                const stk::mesh::PartVector& parts);
 
@@ -259,6 +264,10 @@ private:
 
   // Only nodes that share with other procs that I don't own
   Teuchos::RCP<LinSys::Map>    sharedNotOwnedRowsMap_;
+
+  // Owned and shared
+  Teuchos::RCP<LinSys::Map>    sharedAndOwnedRowsMap_;
+
 
   Teuchos::RCP<LinSys::Graph>  ownedGraph_;
   Teuchos::RCP<LinSys::Graph>  sharedNotOwnedGraph_;

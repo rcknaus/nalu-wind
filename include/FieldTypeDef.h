@@ -31,12 +31,21 @@ typedef ngp::Field<int>  NGPScalarIntFieldType;
 // define vector field typedef; however, what is the value of Cartesian?
 typedef stk::mesh::Field<double, stk::mesh::Cartesian>  VectorFieldType;
 
+// tensor field
+typedef stk::mesh::Field<double, stk::mesh::FullTensor>  TensorFieldType;
+
 // define generic
 typedef stk::mesh::Field<double, stk::mesh::SimpleArrayTag>  GenericFieldType;
 
 // field type for local ids
 typedef unsigned LocalId;
 typedef stk::mesh::Field<LocalId>  LocalIdFieldType;
+
+
+inline void require_nodal_field(const stk::mesh::MetaData& meta, std::string name)
+{
+  ThrowRequireMsg(meta.get_field(stk::topology::NODE_RANK, name), "No field " + name + " registered");
+}
 
 
 // Hypre Integer types

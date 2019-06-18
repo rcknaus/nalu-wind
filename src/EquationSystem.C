@@ -517,6 +517,19 @@ EquationSystem::post_iter_work()
   }
 }
 
+void
+EquationSystem::output_banner(int iters, double finalResidNorm, double nonLinearResidual, double scaledNonLinearResidual)
+{
+  const int nameOffset = name_.length() + 8;
+  NaluEnv::self().naluOutputP0()
+    << std::setw(nameOffset) << std::right << name_
+    << std::setw(32-nameOffset)  << std::right << iters
+    << std::setw(18) << std::right << finalResidNorm
+    << std::setw(15) << std::right << nonLinearResidual
+    << std::setw(14) << std::right << scaledNonLinearResidual << std::endl;
+}
+
+
 PecletFunction<DoubleType>*
 EquationSystem::ngp_create_peclet_function(const std::string& dofName)
 {

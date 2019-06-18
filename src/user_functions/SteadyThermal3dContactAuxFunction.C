@@ -21,7 +21,7 @@ SteadyThermal3dContactAuxFunction::SteadyThermal3dContactAuxFunction() :
   AuxFunction(0,1),
   a_(1.0),
   k_(1.0),
-  pi_(std::acos(-1.0))
+  pi_(M_PI)
 {
   // nothing to do
 }

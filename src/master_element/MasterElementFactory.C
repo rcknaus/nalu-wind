@@ -31,12 +31,16 @@
 #include <stk_util/util/ReportHandler.hpp>
 #include <stk_topology/topology.hpp>
 
+#include "MatrixFreeTraits.h"
+
 #include <cmath>
 #include <iostream>
 #include <memory>
 
 namespace sierra{
 namespace nalu{
+
+  static constexpr QuadratureRuleType quad_type =  (MF::doMatrixFree) ? QuadratureRuleType::ONE_POINT_PER_SCV : QuadratureRuleType::MINIMUM_GAUSS;
 
   std::unique_ptr<MasterElement>
   create_surface_master_element(stk::topology topo)
@@ -168,7 +172,7 @@ namespace nalu{
         LagrangeBasis(desc->inverseNodeMap, desc->nodeLocs1D)
       : LagrangeBasis(desc->inverseNodeMapBC, desc->nodeLocs1D);
 
-    auto quad = TensorProductQuadratureRule(desc->polyOrder);
+    auto quad = TensorProductQuadratureRule(desc->polyOrder, quad_type);
 
     if (topo.is_superedge()) {
       ThrowRequire(desc->baseTopo == stk::topology::QUAD_4_2D);
@@ -206,7 +210,7 @@ namespace nalu{
 
     auto desc = ElementDescription::create(dimension, topo);
     auto basis = LagrangeBasis(desc->inverseNodeMap, desc->nodeLocs1D);
-    auto quad = TensorProductQuadratureRule(desc->polyOrder);
+    auto quad = TensorProductQuadratureRule(desc->polyOrder, quad_type);
 
     switch (desc->baseTopo.value()) {
       case stk::topology::QUADRILATERAL_4_2D:

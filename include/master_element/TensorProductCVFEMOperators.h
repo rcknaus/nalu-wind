@@ -57,8 +57,8 @@ void nodal_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 
 void scs_xhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 {
-  nodal_scalar_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_scalar_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_x<p, Scalar, p, n, n>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, p, n, n>(mat_.scsDeriv, f, grad, XH);
@@ -68,8 +68,8 @@ void scs_xhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 
 void scs_xhat_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 {
-  nodal_vector_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_vector_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_x<p, Scalar, p, n, n>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, p, n, n>(mat_.scsDeriv, f, grad, XH);
@@ -79,8 +79,8 @@ void scs_xhat_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 
 void scs_yhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 {
-  nodal_scalar_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_scalar_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_y<p, Scalar, n, p, n>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, n, p, n>(mat_.nodalDeriv, scratch, grad, XH);
@@ -89,8 +89,8 @@ void scs_yhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 }
 void scs_yhat_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 {
-  nodal_vector_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_vector_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_y<p, Scalar, n, p, n>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, n, p, n>(mat_.nodalDeriv, scratch, grad, XH);
@@ -100,8 +100,8 @@ void scs_yhat_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 
 void scs_zhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 {
-  nodal_scalar_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_scalar_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_z<p, Scalar, n, n, p>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, n, n, p>(mat_.nodalDeriv, scratch, grad, XH);
@@ -111,8 +111,8 @@ void scs_zhat_grad(const nodal_scalar_view& f, nodal_vector_view& grad) const
 
 void scs_zhat_grad(const nodal_vector_view& f, nodal_tensor_view& grad) const
 {
-  nodal_vector_workview work_scratch;
-  auto& scratch = work_scratch.view();
+  nodal_vector_array<Scalar, p> work_scratch;
+  auto scratch = la::make_view(work_scratch);
   tensor_internal::apply_z<p, Scalar, n, n, p>(mat_.scsInterp, f, scratch);
 
   tensor_internal::apply_x<p, Scalar, n, n, p>(mat_.nodalDeriv, scratch, grad, XH);
@@ -151,15 +151,16 @@ void scs_zhat_interp(const nodal_vector_view& f, nodal_vector_view& fIp) const
 
 void volume(const nodal_scalar_view& f, nodal_scalar_view& f_bar) const
 {
-  nodal_scalar_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_scalar_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
+  {
+    nodal_scalar_array<Scalar, p> work_scratch_2;
+    auto scratch_2 = la::make_view(work_scratch_2);
 
-  nodal_scalar_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
-
-  tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
-  tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_2, scratch_1);
+    tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
+    tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_2, scratch_1);
+  }
 
   for (int k = 0; k < n; ++k) {
     for (int j = 0; j < n; ++j) {
@@ -172,15 +173,16 @@ void volume(const nodal_scalar_view& f, nodal_scalar_view& f_bar) const
 
 void volume(const nodal_vector_view& f, nodal_vector_view& f_bar) const
 {
-  nodal_vector_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_vector_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
+  {
+    nodal_vector_array<Scalar, p> work_scratch_2;
+    auto scratch_2 = la::make_view(work_scratch_2);
 
-  nodal_vector_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
-
-  tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
-  tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_2, scratch_1);
+    tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
+    tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_2, scratch_1);
+  }
 
   for (int k = 0; k < n; ++k) {
     for (int j = 0; j < n; ++j) {
@@ -195,72 +197,72 @@ void volume(const nodal_vector_view& f, nodal_vector_view& f_bar) const
 
 void integrate_and_diff_xhat(const nodal_scalar_view& f, nodal_scalar_view& f_bar) const
 {
-  nodal_scalar_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_scalar_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_scalar_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_scalar_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_x<p, Scalar>(scratch_2, f_bar);
 }
 
 void integrate_and_diff_xhat(const nodal_vector_view& f, nodal_vector_view& f_bar) const
 {
-  nodal_vector_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_vector_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_vector_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_vector_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_x<p, Scalar>(scratch_2, f_bar);
 }
 
 void integrate_and_diff_yhat(const nodal_scalar_view& f, nodal_scalar_view& f_bar) const
 {
-  nodal_scalar_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_scalar_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_scalar_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_scalar_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_y<p, Scalar>(scratch_2, f_bar);
 }
 
 void integrate_and_diff_yhat(const nodal_vector_view& f, nodal_vector_view& f_bar) const
 {
-  nodal_vector_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_vector_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_vector_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_vector_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_z<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_y<p, Scalar>(scratch_2, f_bar);
 }
 
 void integrate_and_diff_zhat(const nodal_scalar_view& f, nodal_scalar_view& f_bar) const
 {
-  nodal_scalar_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_scalar_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_scalar_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_scalar_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_z<p, Scalar>(scratch_2, f_bar);
 }
 
 void integrate_and_diff_zhat(const nodal_vector_view& f, nodal_vector_view& f_bar) const
 {
-  nodal_vector_workview work_scratch_1;
-  auto& scratch_1 = work_scratch_1.view();
+  nodal_vector_array<Scalar, p> work_scratch_1;
+  auto scratch_1 = la::make_view(work_scratch_1);
   tensor_internal::apply_x<p, Scalar, n, n, n>(mat_.nodalWeights, f, scratch_1);
 
-  nodal_vector_workview work_scratch_2;
-  auto& scratch_2 = work_scratch_2.view();
+  nodal_vector_array<Scalar, p> work_scratch_2;
+  auto scratch_2 = la::make_view(work_scratch_2);
   tensor_internal::apply_y<p, Scalar, n, n, n>(mat_.nodalWeights, scratch_1, scratch_2);
   tensor_internal::difference_z<p, Scalar>(scratch_2, f_bar);
 }

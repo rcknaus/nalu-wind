@@ -12,6 +12,7 @@
 #include <Kokkos_Macros.hpp>
 #include <Kokkos_Core.hpp>
 
+#define NALU_ALIGNMENT KOKKOS_MEMORY_ALIGNMENT
 #define NALU_ALIGNED alignas(KOKKOS_MEMORY_ALIGNMENT)
 
 #if defined(__INTEL_COMPILER)
@@ -80,6 +81,7 @@ inline DeviceTeamPolicy get_device_team_policy(const size_t sz, const size_t byt
   return policy.set_scratch_size(1, Kokkos::PerTeam(bytes_per_team), Kokkos::PerThread(bytes_per_thread));
 }
 
+
 template<typename T, typename TEAMHANDLETYPE, typename TeamShmemType=HostShmem>
 KOKKOS_FUNCTION
 SharedMemView<T*,TeamShmemType> get_shmem_view_1D(const TEAMHANDLETYPE& team, size_t len)
@@ -134,7 +136,10 @@ inline T* kokkos_malloc_on_device(const std::string& debuggingName) {
   return static_cast<T*>(Kokkos::kokkos_malloc(debuggingName, sizeof(T)));
 }
 inline void kokkos_free_on_device(void * ptr) { Kokkos::kokkos_free(ptr); }
+
 }
 }
+
+
 
 #endif /* INCLUDE_KOKKOSINTERFACE_H_ */

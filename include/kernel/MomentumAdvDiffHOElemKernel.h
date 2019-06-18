@@ -51,6 +51,7 @@ private:
 
   VectorFieldType* coordinates_{nullptr};
   VectorFieldType* velocity_{nullptr};
+  VectorFieldType* provisionalVelocity_{nullptr};
   VectorFieldType* Gp_{nullptr};
   ScalarFieldType* viscosity_{nullptr};
   ScalarFieldType* pressure_{nullptr};

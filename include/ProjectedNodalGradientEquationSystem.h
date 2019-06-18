@@ -13,6 +13,7 @@
 #include <EquationSystem.h>
 #include <FieldTypeDef.h>
 #include <NaluParsing.h>
+#include "MatrixFreeTraits.h"
 
 #include <stk_mesh/base/FieldBase.hpp>
 #include <stk_mesh/base/CoordinateSystems.hpp>
@@ -28,7 +29,7 @@ class Realm;
 class AssembleNodalGradAlgorithmDriver;
 class AlgorithmDriver;
 class EquationSystems;
-
+template <int> class PNGSolver;
 class ProjectedNodalGradientEquationSystem : public EquationSystem {
 
 public:
@@ -109,6 +110,10 @@ public:
   // internal fields
   VectorFieldType *dqdx_;
   VectorFieldType *qTmp_;  
+
+  bool isInit_{true};
+
+  std::shared_ptr<PNGSolver<MF::p>> pngSolv_;
 };
 
 } // namespace nalu

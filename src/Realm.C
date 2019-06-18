@@ -151,6 +151,8 @@
 // catalyst visualization output
 #include <Iovs_DatabaseIO.h>
 
+#include "MatrixFreeTraits.h"
+
 #define USE_NALU_PERFORMANCE_TESTING_CALLGRIND 0
 #if USE_NALU_PERFORMANCE_TESTING_CALLGRIND
 #include "/usr/netpub/valgrind-3.8.1/include/valgrind/callgrind.h"
@@ -3202,6 +3204,19 @@ Realm::overset_orphan_node_field_update(
   oversetManager_->overset_orphan_node_field_update(theField, sizeRow, sizeCol);
 }
 
+bool Realm::is_output_step()
+{
+  const double elapsedWallTime = stk::wall_time() - wallTimeStart_;
+  double g_elapsedWallTime = 0.0;
+  stk::all_reduce_max(NaluEnv::self().parallel_comm(), &elapsedWallTime, &g_elapsedWallTime, 1);
+  g_elapsedWallTime /= 3600.0;
+
+  bool forcedOutput =  g_elapsedWallTime > outputInfo_->userWallTimeResults_.second ;
+  const int timeStepCount = get_time_step_count();
+  const int modStep = timeStepCount - outputInfo_->outputStart_;
+  return (timeStepCount >=outputInfo_->outputStart_ && modStep % outputInfo_->outputFreq_ == 0) || forcedOutput;
+}
+
 //--------------------------------------------------------------------------
 //-------- provide_output --------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3271,6 +3286,8 @@ Realm::provide_output()
     timerOutputFields_ += (stop_time - start_time);
   }
 }
+
+
 
 //--------------------------------------------------------------------------
 //-------- provide_restart_output ------------------------------------------
@@ -4424,8 +4441,8 @@ Realm::setup_element_promotion()
       superTargetNames_.push_back(superName);
 
       // Create elements for future use
-      sierra::nalu::MasterElementRepo::get_surface_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
-      sierra::nalu::MasterElementRepo::get_volume_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
+      MasterElementRepo::get_surface_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
+      MasterElementRepo::get_volume_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
     }
   }
 
@@ -4448,12 +4465,17 @@ Realm::setup_element_promotion()
           metaData_->declare_part_subset(*superSuperset, *superFacePart);
 
           // Create elements for future use
-          sierra::nalu::MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
-          sierra::nalu::MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+          MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+          MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
         }
       }
     }
   }
+  auto sideTopo = (metaData_->spatial_dimension() == 2) ?
+      stk::create_superedge_topology(desc_->nodesPerSide)
+    : stk::create_superface_topology(desc_->nodesPerSide);
+  MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+  MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
 
   metaData_->declare_part("edge_part", stk::topology::EDGE_RANK);
   if (metaData_->spatial_dimension() == 3) {

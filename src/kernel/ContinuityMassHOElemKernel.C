@@ -49,14 +49,14 @@ ContinuityMassHOElemKernel<AlgTraits>::ContinuityMassHOElemKernel(
   coordinates_ = meta_data.get_field<VectorFieldType>(stk::topology::NODE_RANK, solnOpts.get_coordinates_name());
   dataPreReqs.add_coordinates_field(*coordinates_, AlgTraits::nDim_, CURRENT_COORDINATES);
 
-  ScalarFieldType *density = meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
-  densityN_ = &(density->field_of_state(stk::mesh::StateN));
-  dataPreReqs.add_gathered_nodal_field(*densityN_, 1);
-
-  densityNp1_ = &(density->field_of_state(stk::mesh::StateNP1));
+  ScalarFieldType& density = *meta_data.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
+  densityNp1_ = &density.field_of_state(stk::mesh::StateNP1);
   dataPreReqs.add_gathered_nodal_field(*densityNp1_, 1);
 
-  densityNm1_ = (density->number_of_states() == 2) ? densityN_ : &(density->field_of_state(stk::mesh::StateNM1));
+  densityN_ = &density.field_of_state(stk::mesh::StateN);
+  dataPreReqs.add_gathered_nodal_field(*densityN_, 1);
+
+  densityNm1_ = (density.number_of_states() == 2) ? densityN_ : &density.field_of_state(stk::mesh::StateNM1);
   dataPreReqs.add_gathered_nodal_field(*densityNm1_, 1);
 }
 //--------------------------------------------------------------------------

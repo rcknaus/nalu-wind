@@ -19,6 +19,88 @@
 namespace sierra {
 namespace nalu {
 namespace high_order_metrics {
+namespace internal {
+
+//template<int p, typename Scalar>
+//void hex_vertex_coordinates(
+//  const nodal_vector_view<p, Scalar>& xc,
+//  Scalar base_box[3][8])
+//{
+//  for (int d = 0; d < 3; ++d) {
+//    base_box[d][0] = xc(0, 0, 0, d);
+//    base_box[d][1] = xc(0, 0, p, d);
+//    base_box[d][2] = xc(0, p, p, d);
+//    base_box[d][3] = xc(0, p, 0, d);
+//
+//    base_box[d][4] = xc(p, 0, 0, d);
+//    base_box[d][5] = xc(p, 0, p, d);
+//    base_box[d][6] = xc(p, p, p, d);
+//    base_box[d][7] = xc(p, p, 0, d);
+//  }
+//}
+//
+//
+//template <int di, int dj, typename Scalar>
+//Scalar hex_jacobian_component(
+//  const LocalArray<Scalar[3][8]> base_box,
+//  double il, double ir,
+//  double jl, double jr,
+//  double kl, double kr)
+//{
+//  return (dj == XH) ?
+//  ( -jl * kl * base_box(di, 0)
+//  +  jl * kl * base_box(di, 1)
+//  +  jr * kl * base_box(di, 2)
+//  -  jr * kl * base_box(di, 3)
+//  -  jl * kr * base_box(di, 4)
+//  +  jl * kr * base_box(di, 5)
+//  +  jr * kr * base_box(di, 6)
+//  -  jr * kr * base_box(di, 7)
+//      ) * 0.5
+// : (dj == YH) ?
+//  ( -il * kl * base_box(di, 0)
+//  -  ir * kl * base_box(di, 1)
+//  +  ir * kl * base_box(di, 2)
+//  +  il * kl * base_box(di, 3)
+//  -  il * kr * base_box(di, 4)
+//  -  ir * kr * base_box(di, 5)
+//  +  ir * kr * base_box(di, 6)
+//  +  il * kr * base_box(di, 7)
+//  ) * 0.5
+//  :
+//  ( -il * jl * base_box(di, 0)
+//  -  ir * jl * base_box(di, 1)
+//  -  ir * jr * base_box(di, 2)
+//  -  il * jr * base_box(di, 3)
+//  +  il * jl * base_box(di, 4)
+//  +  ir * jl * base_box(di, 5)
+//  +  ir * jr * base_box(di, 6)
+//  +  il * jr * base_box(di, 7)
+//   ) * 0.5;
+//}
+//
+//template <int di> LocalArray<DoubleType[3]> area_vector(
+//  const LocalArray<DoubleType[3][8]> box,
+//  double il, double ir,
+//  double jl, double jr,
+//  double kl, double kr)
+//{
+//  constexpr int ds1 = (di == XH) ? ZH : (di == YH) ? XH : YH;
+//  constexpr int ds2 = (di == XH) ? YH : (di == YH) ? ZH : XH;
+//
+//  const auto dx_ds1 = hex_jacobian_component<XH,ZH>(box, il, ir, jl, jr, kl, kr);
+//  const auto dx_ds2 = hex_jacobian_component<XH,YH>(box, il, ir, jl, jr, kl, kr);
+//
+//  const auto dy_ds1 = hex_jacobian_component<YH,ZH>(box, il, ir, jl, jr, kl, kr);
+//  const auto dy_ds2 = hex_jacobian_component<YH,YH>(box, il, ir, jl, jr, kl, kr);
+//
+//  const auto dz_ds1 = hex_jacobian_component<ZH,ZH>(box, il, ir, jl, jr, kl, kr);
+//  const auto dz_ds2 = hex_jacobian_component<ZH,YH>(box, il, ir, jl, jr, kl, kr);
+//  return {{ dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2, dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2, dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2 }};
+//}
+//}
+//
+}
 
   template <int p, typename Scalar>
   void compute_area_linear(
@@ -38,7 +120,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
         for (int i = 0; i < p; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { scsInterp(0, i), scsInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3]  = {0.,0.,0.};
           hex_areav_x(base_box, interpi, interpj, interpk, areav);
 
           metric(XH, k, j, i, XH) = areav[XH];
@@ -54,7 +136,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { scsInterp(0, j), scsInterp(1, j) };
         for (int i = 0; i < p + 1; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3] = {0.,0.,0.};
           hex_areav_y(base_box, interpi, interpj, interpk, areav);
 
           metric(YH, k, j, i, XH) = areav[XH];
@@ -70,7 +152,7 @@ namespace high_order_metrics {
         NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
         for (int i = 0; i < p + 1; ++i) {
           NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
-          NALU_ALIGNED Scalar areav[3];
+          NALU_ALIGNED Scalar areav[3] = {0.,0.,0.};
           hex_areav_z(base_box, interpi, interpj, interpk, areav);
 
           metric(ZH, k, j, i, XH) = areav[XH];
@@ -82,7 +164,7 @@ namespace high_order_metrics {
   }
 
   template <int p, typename Scalar>
-    void compute_mdot_linear(
+  void compute_mdot_linear(
       const CVFEMOperators<p, Scalar>& ops,
       const nodal_vector_view<p, Scalar>& xc,
       const scs_vector_view<p, Scalar>& laplacian_metric,
@@ -99,8 +181,8 @@ namespace high_order_metrics {
       NALU_ALIGNED Scalar base_box[3][8];
       hex_vertex_coordinates<p, Scalar>(xc, base_box);
 
-      nodal_vector_workview<p, Scalar> work_rhou_corr;
-      auto& rhou_corr = work_rhou_corr.view();
+      nodal_vector_array<Scalar, p> work_rhou_corr;
+      auto rhou_corr = la::make_view(work_rhou_corr);
 
       for (int k = 0; k < p + 1; ++k) {
         for (int j = 0; j < p + 1; ++j) {
@@ -113,11 +195,11 @@ namespace high_order_metrics {
         }
       }
 
-      nodal_vector_workview<p, Scalar> work_rhou_corrIp;
-      auto& rhou_corrIp = work_rhou_corrIp.view();
+      nodal_vector_array<Scalar, p> work_rhou_corrIp;
+      auto rhou_corrIp = la::make_view(work_rhou_corrIp);
 
-      nodal_vector_workview<p, Scalar> work_dpdxhIp;
-      auto& dpdxhIp = work_dpdxhIp.view();
+      nodal_vector_array<Scalar, p> work_dpdxhIp;
+      auto dpdxhIp = la::make_view(work_dpdxhIp);
 
       ops.scs_xhat_interp(rhou_corr, rhou_corrIp);
       ops.scs_xhat_grad(pressure, dpdxhIp);

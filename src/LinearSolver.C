@@ -102,10 +102,12 @@ void TpetraLinearSolver::setupLinearSolver(
     preconditioner_->setParameters(*paramsPrecond_);
     
     // delay initialization for some preconditioners
-    if ( "RILUK" != preconditionerType_ ) {
-      preconditioner_->initialize();
+    if (computePreconditioner) {
+      if ( "RILUK" != preconditionerType_ ) {
+        preconditioner_->initialize();
+      }
+      problem_->setRightPrec(preconditioner_);
     }
-    problem_->setRightPrec(preconditioner_);
 
     // create the solver, e.g., gmres, cg, tfqmr, bicgstab
     LinSys::SolverFactory sFactory;
@@ -135,7 +137,11 @@ void TpetraLinearSolver::setMueLu()
 
     if (recomputePreconditioner_ || mueluPreconditioner_ == Teuchos::null)
     {
-      mueluPreconditioner_ = MueLu::CreateTpetraPreconditioner<SC,LO,GO,NO>(Teuchos::RCP<Tpetra::Operator<SC,LO,GO,NO> >(matrix_), *paramsPrecond_);
+//      auto params = Teuchos::parameterList();
+//      params->set("xml parameter file", "milestone.xml");
+
+      mueluPreconditioner_ = MueLu::CreateTpetraPreconditioner<SC,LO,GO,NO>(
+        Teuchos::RCP<Tpetra::Operator<SC,LO,GO,NO> >(matrix_), *paramsPrecond_);
     }
     else if (reusePreconditioner_) {
       MueLu::ReuseTpetraPreconditioner(matrix_, *mueluPreconditioner_);
@@ -144,7 +150,9 @@ void TpetraLinearSolver::setMueLu()
       Teuchos::TimeMonitor::summarize(std::cout, false, true, false, Teuchos::Union);
   }
 
-  problem_->setRightPrec(mueluPreconditioner_);
+  if (computePreconditioner) {
+    problem_->setRightPrec(mueluPreconditioner_);
+  }
 
   // create the solver, e.g., gmres, cg, tfqmr, bicgstab
   LinSys::SolverFactory sFactory;
@@ -193,6 +201,7 @@ TpetraLinearSolver::solve(
   const int status = 0;
   int whichNorm = 2;
   finalResidNrm=0.0;
+  std::cout << "------------ (preproblem)" << std::endl;
 
   double time = -NaluEnv::self().nalu_time();
   if (activateMueLu_)
@@ -201,10 +210,12 @@ TpetraLinearSolver::solve(
   }
   else
   {
-    if ( "RILUK" == preconditionerType_ ) {
-      preconditioner_->initialize();
+    if (computePreconditioner) {
+      if ( "RILUK" == preconditionerType_ ) {
+        preconditioner_->initialize();
+      }
+      preconditioner_->compute();
     }
-    preconditioner_->compute();
   }
   time += NaluEnv::self().nalu_time();
 
@@ -223,8 +234,23 @@ TpetraLinearSolver::solve(
   solver_->setParameters(params);
 
   problem_->setProblem();
-  solver_->solve();
+//  std::cout << "xlen: " <<problem_->getLHS()->getNumVectors() << ", ylen: "<< problem_->getRHS()->getNumVectors()  << std::endl;
 
+// //  problem vectors:
+//  std::cout << "------------ (presolve)" << std::endl;
+//  const auto x_view = problem_->getLHS()->getLocalView<HostSpace>();
+//  const auto y_view =  problem_->getRHS()->getLocalView<HostSpace>();
+//  ThrowRequire(x_view.extent_int(0) == y_view.extent_int(0));
+//  for (int k = 0; k < y_view.extent_int(0); k += 3) {
+//    std::cout << k/3 << "(x,y): (" << x_view(k,0) << ", " << -y_view(k,0)  << ", " << -y_view(k+1,0) << ", "  << -y_view(k+2,0)<<")" << std::endl;
+//  }
+  std::cout << "------------ (solve)" << std::endl;
+  solver_->solve();
+//  std::cout << "------------ (postsolve)"  << std::endl;
+//  for (int k = 0; k < y_view.extent_int(0); k += 3) {
+//    std::cout << k/3 << "(x,y): (" << x_view(k,0) << ", " << y_view(k,0)  << ", " << y_view(k+1,0) << ", "  << y_view(k+2,0)<<")" << std::endl;
+//  }
+//  std::cout << "------------" << std::endl;
   iters = solver_->getNumIters();
   residual_norm(whichNorm, sln, finalResidNrm);
 

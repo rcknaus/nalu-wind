@@ -57,9 +57,8 @@ promote_elements(
   stk::mesh::Part* facePart)
 {
   // only quads and hexs implemented
-
+  ThrowRequire(edgePart != nullptr);
   if (desc.dimension == 2) {
-    ThrowRequire(edgePart != nullptr);
     return internal::promote_elements_quad(bulk, desc, coordField, partsToBePromoted, *edgePart);
   }
   ThrowRequire(facePart != nullptr);
@@ -266,7 +265,7 @@ create_super_elements(
   stk::mesh::PartVector promotedElemParts;
   size_t idCounter = 0;
   for (auto* ip : elemPartsToBePromoted) {
-    auto& superPart = *super_elem_part(*ip);
+    auto* superPart = super_elem_part(*ip);
 
     const auto& elem_part_buckets = bulk.get_buckets(stk::topology::ELEM_RANK, *ip);
     bucket_loop(elem_part_buckets, [&](const stk::mesh::Entity elem) {
@@ -275,10 +274,10 @@ create_super_elements(
       add_face_nodes_to_elem_connectivity(bulk, desc, faceConnectivity, elem, elemConnectivity);
       add_volume_nodes_to_elem_connectivity(bulk, desc, volumeConnectivity, elem, elemConnectivity);
 
-      stk::mesh::declare_element(bulk, superPart, elemIds[idCounter], elemConnectivity);
+      stk::mesh::declare_element(bulk, *superPart, elemIds[idCounter], elemConnectivity);
       ++idCounter;
     });
-    promotedElemParts.push_back(&superPart);
+    promotedElemParts.push_back(superPart);
   }
 
   return promotedElemParts;
@@ -303,7 +302,7 @@ create_boundary_elements(
   stk::mesh::PartVector superSideParts;
 
   size_t faceIdIndex = 0;
-
+///
   bulk.modification_begin();
   for (const auto* ipart : parts) {
     for (const auto* subset : ipart->subsets()) {

@@ -71,7 +71,7 @@ TpetraLinearSolverConfig::load(const YAML::Node & node)
   if (precond_ == "sgs") {
     preconditionerType_ = "RELAXATION";
     paramsPrecond_->set("relaxation: type","Symmetric Gauss-Seidel");
-    paramsPrecond_->set("relaxation: sweeps",1);
+    paramsPrecond_->set("relaxation: sweeps", 1);
   }
   else if (precond_ == "mt_sgs") {
     preconditionerType_ = "RELAXATION";
@@ -104,6 +104,16 @@ TpetraLinearSolverConfig::load(const YAML::Node & node)
 
   get_if_present(node, "recompute_preconditioner", recomputePreconditioner_, recomputePreconditioner_);
   get_if_present(node, "reuse_preconditioner",     reusePreconditioner_,     reusePreconditioner_);
+
+  constexpr bool verbose =false;
+  if (verbose) {
+//    params->set("Output Frequency", 1);
+    Teuchos::RCP<std::ostream> belosOutputStream = Teuchos::rcpFromRef(std::cout);
+    params_->set("Output Stream", belosOutputStream);
+    params_->set("Verbosity", Belos::Debug + Belos::Warnings + Belos::IterationDetails
+      + Belos::OrthoDetails + Belos::FinalSummary
+      + Belos::TimingDetails + Belos::StatusTestDetails);
+  }
 
 }
 

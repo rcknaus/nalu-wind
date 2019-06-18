@@ -5,32 +5,24 @@
 /*  directory structure                                                   */
 /*------------------------------------------------------------------------*/
 
-
 #include <kernel/ScalarDiffHOElemKernel.h>
 #include <kernel/TensorProductCVFEMDiffusion.h>
+#include <kernel/TensorProductCVFEMScalarBDF2TimeDerivative.h>
 #include <master_element/TensorProductCVFEMDiffusionMetric.h>
+#include <master_element/TensorProductCVFEMVolumeMetric.h>
 
-#include <SolutionOptions.h>
-
-#include <kernel/Kernel.h>
-#include <FieldTypeDef.h>
-#include <Realm.h>
-
-// template and scratch space
 #include <BuildTemplates.h>
-#include <ScratchViews.h>
+#include <FieldTypeDef.h>
+#include <SolutionOptions.h>
+#include <TimeIntegrator.h>
 
-// stk_mesh/base/fem
+#include <KokkosInterface.h>
+#include <SimdInterface.h>
+
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/Field.hpp>
-
-// topology
 #include <stk_topology/topology.hpp>
-
-// Kokkos
-#include <KokkosInterface.h>
-#include <SimdInterface.h>
 
 namespace sierra{
 namespace nalu{
@@ -83,7 +75,6 @@ ScalarDiffHOElemKernel<AlgTraits>::execute(
   auto end_time_resid = std::chrono::steady_clock::now();
   timer_resid += std::chrono::duration_cast<std::chrono::duration<double>>(end_time_resid - start_time_resid).count();
 }
-
 INSTANTIATE_KERNEL_HOSGL(ScalarDiffHOElemKernel)
 
 } // namespace nalu

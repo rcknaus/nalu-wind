@@ -1,5 +1,4 @@
 add_sources(GlobalUnitSourceList
-   UnitTestDiffusionHO.C
    UnitTestDiffusionMetricHO.C
    UnitTestOperatorsHO.C
    UnitTestMomentumAdvDiffHO.C

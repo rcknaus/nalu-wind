@@ -374,16 +374,15 @@ Scalar hex_jacobian_component(
   const Scalar interpj[2],
   const Scalar interpk[2])
 {
-
   return (dj == XH) ?
-  ( -interpi[0] * interpk[0] * base_box[di][0]
-  -  interpi[1] * interpk[0] * base_box[di][1]
-  +  interpi[1] * interpk[0] * base_box[di][2]
-  +  interpi[0] * interpk[0] * base_box[di][3]
-  -  interpi[0] * interpk[1] * base_box[di][4]
-  -  interpi[1] * interpk[1] * base_box[di][5]
-  +  interpi[1] * interpk[1] * base_box[di][6]
-  +  interpi[0] * interpk[1] * base_box[di][7]
+  ( -interpj[0] * interpk[0] * base_box[di][0]
+  +  interpj[0] * interpk[0] * base_box[di][1]
+  +  interpj[1] * interpk[0] * base_box[di][2]
+  -  interpj[1] * interpk[0] * base_box[di][3]
+  -  interpj[0] * interpk[1] * base_box[di][4]
+  +  interpj[0] * interpk[1] * base_box[di][5]
+  +  interpj[1] * interpk[1] * base_box[di][6]
+  -  interpj[1] * interpk[1] * base_box[di][7]
   ) * 0.5
   : (dj == YH) ?
   ( -interpi[0] * interpk[0] * base_box[di][0]
@@ -468,18 +467,25 @@ void hex_areav_x(
   const Scalar interpk[2],
   Scalar area[3])
 {
-  const auto dx_ds1 = jacobian_component_zh(0, base_box, interpi, interpj);
-  const auto dx_ds2 = jacobian_component_yh(0, base_box, interpi, interpk);
+//  const auto dx_ds1 = hex_jacobian_component<XH, ZH>(base_box,interpi, interpj, interpk);
 
-  const auto dy_ds1 = jacobian_component_zh(1, base_box, interpi, interpj);
-  const auto dy_ds2 = jacobian_component_yh(1, base_box, interpi, interpk);
-
-  const auto dz_ds1 = jacobian_component_zh(2, base_box, interpi, interpj);
-  const auto dz_ds2 = jacobian_component_yh(2, base_box, interpi, interpk);
-
-  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
-  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
-  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
+  NALU_ALIGNED Scalar jac[3][3];
+  hex_jacobian_t(base_box, interpi, interpj, interpk, jac);
+  areav_from_jacobian_t<XH>(jac, area);
+//
+//
+//  const auto dx_ds1 = jacobian_component_zh(0, base_box, interpi, interpj);
+//  const auto dx_ds2 = jacobian_component_yh(0, base_box, interpi, interpk);
+//
+//  const auto dy_ds1 = jacobian_component_zh(1, base_box, interpi, interpj);
+//  const auto dy_ds2 = jacobian_component_yh(1, base_box, interpi, interpk);
+//
+//  const auto dz_ds1 = jacobian_component_zh(2, base_box, interpi, interpj);
+//  const auto dz_ds2 = jacobian_component_yh(2, base_box, interpi, interpk);
+//
+//  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
+//  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
+//  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
 }
 
 
@@ -492,18 +498,23 @@ void hex_areav_y(
   const Scalar interpk[2],
   Scalar area[3])
 {
-  const auto dx_ds1 = jacobian_component_xh(0, base_box, interpj, interpk);
-  const auto dx_ds2 = jacobian_component_zh(0, base_box, interpi, interpj);
 
-  const auto dy_ds1 = jacobian_component_xh(1, base_box, interpj, interpk);
-  const auto dy_ds2 = jacobian_component_zh(1, base_box, interpi, interpj);
-
-  const auto dz_ds1 = jacobian_component_xh(2, base_box, interpj, interpk);
-  const auto dz_ds2 = jacobian_component_zh(2, base_box, interpi, interpj);
-
-  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
-  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
-  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
+  NALU_ALIGNED Scalar jac[3][3];
+  hex_jacobian_t(base_box, interpi, interpj, interpk, jac);
+  areav_from_jacobian_t<YH>(jac, area);
+//
+//  const auto dx_ds1 = jacobian_component_xh(0, base_box, interpj, interpk);
+//  const auto dx_ds2 = jacobian_component_zh(0, base_box, interpi, interpj);
+//
+//  const auto dy_ds1 = jacobian_component_xh(1, base_box, interpj, interpk);
+//  const auto dy_ds2 = jacobian_component_zh(1, base_box, interpi, interpj);
+//
+//  const auto dz_ds1 = jacobian_component_xh(2, base_box, interpj, interpk);
+//  const auto dz_ds2 = jacobian_component_zh(2, base_box, interpi, interpj);
+//
+//  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
+//  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
+//  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
 }
 
 template<typename Scalar>
@@ -515,18 +526,22 @@ void hex_areav_z(
   const Scalar interpk[2],
   Scalar area[3])
 {
-  const auto dx_ds1 = jacobian_component_yh(0, base_box, interpi, interpk);
-  const auto dx_ds2 = jacobian_component_xh(0, base_box, interpj, interpk);
-
-  const auto dy_ds1 = jacobian_component_yh(1, base_box, interpi, interpk);
-  const auto dy_ds2 = jacobian_component_xh(1, base_box, interpj, interpk);
-
-  const auto dz_ds1 = jacobian_component_yh(2, base_box, interpi, interpk);
-  const auto dz_ds2 = jacobian_component_xh(2, base_box, interpj, interpk);
-
-  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
-  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
-  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
+  NALU_ALIGNED Scalar jac[3][3];
+  hex_jacobian_t(base_box, interpi, interpj, interpk, jac);
+  areav_from_jacobian_t<ZH>(jac, area);
+//
+//  const auto dx_ds1 = jacobian_component_yh(0, base_box, interpi, interpk);
+//  const auto dx_ds2 = jacobian_component_xh(0, base_box, interpj, interpk);
+//
+//  const auto dy_ds1 = jacobian_component_yh(1, base_box, interpi, interpk);
+//  const auto dy_ds2 = jacobian_component_xh(1, base_box, interpj, interpk);
+//
+//  const auto dz_ds1 = jacobian_component_yh(2, base_box, interpi, interpk);
+//  const auto dz_ds2 = jacobian_component_xh(2, base_box, interpj, interpk);
+//
+//  area[0] = dy_ds1 * dz_ds2 - dz_ds1 * dy_ds2;
+//  area[1] = dz_ds1 * dx_ds2 - dx_ds1 * dz_ds2;
+//  area[2] = dx_ds1 * dy_ds2 - dy_ds1 * dx_ds2;
 }
 
 template<int p, typename Scalar>
