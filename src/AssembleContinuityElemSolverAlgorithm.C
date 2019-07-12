@@ -335,6 +335,14 @@ AssembleContinuityElemSolverAlgorithm::execute()
       for ( size_t i = 0; i < supplementalAlgSize; ++i )
         supplementalAlg_[i]->elem_execute( &lhs[0], &rhs[0], elem, meSCS, meSCV);
 
+//      for (int j = 0; j < 8; ++j) {
+//        for (int i = 0; i < 8; ++i) {
+//          std:: cout << lhs[8 * j + i] << ", ";
+//        }
+//       std::cout << ", entity: " << connected_nodes[j].local_offset() << std::endl;
+//      }
+//      exit(1);
+
       apply_coeff(connected_nodes, scratchIds, scratchVals, rhs, lhs, __FILE__);
 
     }

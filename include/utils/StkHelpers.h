@@ -40,7 +40,7 @@ inline
 stk::topology get_elem_topo(const Realm& realm, const stk::mesh::Part& surfacePart)
 {
   if (realm.doPromotion_) {
-    return get_promoted_elem_topo(realm.spatialDimension_, realm.promotionOrder_);
+    return get_promoted_elem_topo(realm.spatialDimension_, realm.polyOrder_);
   }
 
   std::vector<const stk::mesh::Part*> blockParts = realm.meta_data().get_blocks_touching_surface(&surfacePart);

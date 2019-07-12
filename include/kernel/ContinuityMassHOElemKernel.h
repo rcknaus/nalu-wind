@@ -47,9 +47,9 @@ public:
     ScratchViewsHO<DoubleType>&) final;
 
 private:
-  ScalarFieldType *densityNm1_{nullptr};
-  ScalarFieldType *densityN_{nullptr};
-  ScalarFieldType *densityNp1_{nullptr};
+  ScalarFieldType* densityNm1_{nullptr};
+  ScalarFieldType* densityN_{nullptr};
+  ScalarFieldType* densityNp1_{nullptr};
 
   VectorFieldType* coordinates_{nullptr};
 

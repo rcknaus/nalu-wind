@@ -199,6 +199,7 @@ protected:
   T* deviceCopy_{nullptr};
 };
 
+
 }  // nalu
 }  // sierra
 

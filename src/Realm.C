@@ -151,6 +151,8 @@
 // catalyst visualization output
 #include <Iovs_DatabaseIO.h>
 
+#include "MatrixFreeTraits.h"
+
 #define USE_NALU_PERFORMANCE_TESTING_CALLGRIND 0
 #if USE_NALU_PERFORMANCE_TESTING_CALLGRIND
 #include "/usr/netpub/valgrind-3.8.1/include/valgrind/callgrind.h"
@@ -252,7 +254,7 @@ namespace nalu{
     balanceNodeOptions_(),
     wallTimeStart_(stk::wall_time()),
     doPromotion_(false),
-    promotionOrder_(0u),
+    polyOrder_(1u),
     inputMeshIdx_(std::numeric_limits<size_t>::max()),
     node_(node)
 {
@@ -687,15 +689,9 @@ Realm::load(const YAML::Node & node)
   // determine if edges are required and whether or not stk handles this
   get_if_present(node, "use_edges", realmUsesEdges_, realmUsesEdges_);
 
-  get_if_present(node, "polynomial_order", promotionOrder_, promotionOrder_);
-  if (promotionOrder_ >=1) {
+  get_if_present(node, "polynomial_order", polyOrder_, polyOrder_);
+  if (polyOrder_ > 1) {
     doPromotion_ = true;
-
-    // with polynomial order set to 1, the HO method defaults down to the consistent mass matrix P1 discretization
-    // super-element/faces are activated despite being unnecessary
-    if (promotionOrder_ == 1) {
-      NaluEnv::self().naluOutputP0() << "Activating the consistent-mass matrix P1 discretization..." << std::endl;
-    }
   }
 
   // let everyone know about core algorithm
@@ -2834,6 +2830,7 @@ Realm::register_wall_bc(
 
   // push back the part for book keeping and, later, skin mesh
   bcPartVec_.push_back(part);
+  wallPartVec_.push_back(part);
 
   const int nDim = metaData_->spatial_dimension();
 
@@ -3202,6 +3199,19 @@ Realm::overset_orphan_node_field_update(
   oversetManager_->overset_orphan_node_field_update(theField, sizeRow, sizeCol);
 }
 
+bool Realm::is_output_step()
+{
+  const double elapsedWallTime = stk::wall_time() - wallTimeStart_;
+  double g_elapsedWallTime = 0.0;
+  stk::all_reduce_max(NaluEnv::self().parallel_comm(), &elapsedWallTime, &g_elapsedWallTime, 1);
+  g_elapsedWallTime /= 3600.0;
+
+  bool forcedOutput =  g_elapsedWallTime > outputInfo_->userWallTimeResults_.second ;
+  const int timeStepCount = get_time_step_count();
+  const int modStep = timeStepCount - outputInfo_->outputStart_;
+  return (timeStepCount >=outputInfo_->outputStart_ && modStep % outputInfo_->outputFreq_ == 0) || forcedOutput;
+}
+
 //--------------------------------------------------------------------------
 //-------- provide_output --------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3271,6 +3281,8 @@ Realm::provide_output()
     timerOutputFields_ += (stop_time - start_time);
   }
 }
+
+
 
 //--------------------------------------------------------------------------
 //-------- provide_restart_output ------------------------------------------
@@ -3618,7 +3630,7 @@ Realm::check_job(bool get_node_count)
         NaluEnv::self().naluOutputP0() << "Node count after promotion = " << nodeCount_ << std::endl;
       }
       else {
-        nodeCount_ = std::pow(promotionOrder_,spatialDimension_) * nodeCount_;
+        nodeCount_ = std::pow(polyOrder_,spatialDimension_) * nodeCount_;
         NaluEnv::self().naluOutputP0() << "(Roughly) Estimated node count after promotion = " << nodeCount_ << std::endl;
       }
     }
@@ -3629,16 +3641,16 @@ Realm::check_job(bool get_node_count)
   unsigned BWFactor = 27;
   if (doPromotion_) {
     // Ignore boundary terms and assume a structured mesh
-    unsigned cornerBWFactor = std::pow((2 * promotionOrder_ + 1), spatialDimension_);
-    unsigned edgeBWFactor = std::pow((2*promotionOrder_+1), spatialDimension_-1) * (promotionOrder_+1);
-    unsigned faceBWFactor = (2*promotionOrder_ + 1) * (promotionOrder_+1) * (promotionOrder_ + 1); // only 3D
-    unsigned interiorBWFactor = std::pow(promotionOrder_ + 1, spatialDimension_);
+    unsigned cornerBWFactor = std::pow((2 * polyOrder_ + 1), spatialDimension_);
+    unsigned edgeBWFactor = std::pow((2*polyOrder_+1), spatialDimension_-1) * (polyOrder_+1);
+    unsigned faceBWFactor = (2*polyOrder_ + 1) * (polyOrder_+1) * (polyOrder_ + 1); // only 3D
+    unsigned interiorBWFactor = std::pow(polyOrder_ + 1, spatialDimension_);
 
     unsigned numCornerNodes = (spatialDimension_ == 3) ? 8 : 4;
-    unsigned numEdgeNodes = (spatialDimension_ == 3) ? 12*(promotionOrder_-1) : 4*(promotionOrder_-1);
-    unsigned numFaceNodes = (spatialDimension_ == 3) ? 6*std::pow(promotionOrder_ - 1, 2) : 0;
-    unsigned numInteriorNodes = std::pow(promotionOrder_ - 1, spatialDimension_);
-    unsigned numNodes = std::pow(promotionOrder_ + 1,spatialDimension_);
+    unsigned numEdgeNodes = (spatialDimension_ == 3) ? 12*(polyOrder_-1) : 4*(polyOrder_-1);
+    unsigned numFaceNodes = (spatialDimension_ == 3) ? 6*std::pow(polyOrder_ - 1, 2) : 0;
+    unsigned numInteriorNodes = std::pow(polyOrder_ - 1, spatialDimension_);
+    unsigned numNodes = std::pow(polyOrder_ + 1,spatialDimension_);
 
     BWFactor = ( cornerBWFactor * numCornerNodes
              +   edgeBWFactor   * numEdgeNodes
@@ -4384,7 +4396,7 @@ Realm::setup_element_promotion()
   // Create a description of the element and deal with the part naming styles
 
   // Struct containing information about the element (e.g. number of nodes, nodes per face, etc.)
-  desc_ = ElementDescription::create(meta_data().spatial_dimension(), promotionOrder_);
+  desc_ = ElementDescription::create(meta_data().spatial_dimension(), polyOrder_);
 
   // Every mesh part is promoted for now
   basePartVector_ = metaData_->get_mesh_parts();
@@ -4424,8 +4436,8 @@ Realm::setup_element_promotion()
       superTargetNames_.push_back(superName);
 
       // Create elements for future use
-      sierra::nalu::MasterElementRepo::get_surface_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
-      sierra::nalu::MasterElementRepo::get_volume_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
+      MasterElementRepo::get_surface_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
+      MasterElementRepo::get_volume_master_element(superPart->topology(), meta_data().spatial_dimension(), "GaussLegendre");
     }
   }
 
@@ -4448,12 +4460,17 @@ Realm::setup_element_promotion()
           metaData_->declare_part_subset(*superSuperset, *superFacePart);
 
           // Create elements for future use
-          sierra::nalu::MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
-          sierra::nalu::MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+          MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+          MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
         }
       }
     }
   }
+  auto sideTopo = (metaData_->spatial_dimension() == 2) ?
+      stk::create_superedge_topology(desc_->nodesPerSide)
+    : stk::create_superface_topology(desc_->nodesPerSide);
+  MasterElementRepo::get_surface_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
+  MasterElementRepo::get_volume_master_element(sideTopo, meta_data().spatial_dimension(), "GaussLegendre");
 
   metaData_->declare_part("edge_part", stk::topology::EDGE_RANK);
   if (metaData_->spatial_dimension() == 3) {

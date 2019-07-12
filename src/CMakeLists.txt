@@ -78,6 +78,7 @@ add_sources(GlobalSourceList
    ComputeTurbKineticEnergyWallFunctionAlgorithm.C
    ComputeWallFrictionVelocityAlgorithm.C
    ComputeWallModelSDRWallAlgorithm.C
+   ConductionDiagonal.C
    ConstantAuxFunction.C
    ContinuityGclNodeSuppAlg.C
    ContinuityLowSpeedCompressibleNodeSuppAlg.C
@@ -86,6 +87,13 @@ add_sources(GlobalSourceList
    ContinuityMassElemSuppAlgDep.C
    CopyFieldAlgorithm.C
    CoriolisSrc.C
+   CVFEMAreas.C
+   CVFEMCorrectedMassFlux.C
+   CVFEMExposedAreas.C
+   CVFEMVolumes.C
+   CVFEMMappedAreas.C
+   CVFEMEffVisc.C
+   CVFEMNodalProjection.C
    DataProbePostProcessing.C
    DgInfo.C
    DirichletBC.C
@@ -102,6 +110,7 @@ add_sources(GlobalSourceList
    EquationSystem.C
    EquationSystems.C
    ErrorIndicatorAlgorithmDriver.C
+   FaceFieldGather.C
    FieldFunctions.C
    FixPressureAtNodeAlgorithm.C
    HeatCondEquationSystem.C
@@ -116,10 +125,12 @@ add_sources(GlobalSourceList
    LinearSolvers.C
    LinearSystem.C
    LowMachEquationSystem.C
+   MassDiagonal.C
    MassFractionEquationSystem.C
    MaterialProperty.C
    MaterialPropertys.C
    MixtureFractionEquationSystem.C
+   MatrixFreeOperator.C
    MomentumABLForceSrcNodeSuppAlg.C
    MomentumActuatorSrcNodeSuppAlg.C
    MomentumBodyForceSrcNodeSuppAlg.C
@@ -128,6 +139,7 @@ add_sources(GlobalSourceList
    MomentumBuoyancySrcElemSuppAlgDep.C
    MomentumBuoyancySrcNodeSuppAlg.C
    MomentumCoriolisSrcNodeSuppAlg.C
+   MomentumDiagonal.C
    MomentumGclSrcNodeSuppAlg.C
    MomentumMassBDF2NodeSuppAlg.C
    MomentumMassBackwardEulerNodeSuppAlg.C
@@ -135,6 +147,7 @@ add_sources(GlobalSourceList
    MovingAveragePostProcessor.C
    NaluEnv.C
    NaluParsing.C
+   NodeFieldGather.C
    NonConformalInfo.C
    NonConformalManager.C
    OutputInfo.C
@@ -146,6 +159,7 @@ add_sources(GlobalSourceList
    PstabErrorIndicatorElemAlgorithm.C
    Realm.C
    Realms.C
+   SimdFieldGather.C
    ScalarGclNodeSuppAlg.C
    ScalarMassBDF2NodeSuppAlg.C
    ScalarMassBackwardEulerNodeSuppAlg.C
@@ -159,6 +173,7 @@ add_sources(GlobalSourceList
    SolutionOptions.C
    SolverAlgorithm.C
    SolverAlgorithmDriver.C
+   SparsifiedLaplacian.C
    SpecificDissipationRateEquationSystem.C
    SpecificDissipationRateSSTNodeSourceSuppAlg.C
    SupplementalAlgorithm.C
@@ -168,6 +183,7 @@ add_sources(GlobalSourceList
    TimeIntegrator.C
    TpetraLinearSystem.C
    TpetraLinearSystemHelpers.C
+   TpetraMatrixFreeSolver.C
    TpetraSegregatedLinearSystem.C
    TurbKineticEnergyEquationSystem.C
    TurbKineticEnergyKsgsBuoyantElemSuppAlg.C
@@ -231,3 +247,4 @@ add_subdirectory(utils)
 add_subdirectory(user_functions)
 add_subdirectory(xfer)
 add_subdirectory(wind_energy)
+add_subdirectory(tpetra_linsys)

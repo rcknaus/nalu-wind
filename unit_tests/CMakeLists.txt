@@ -11,7 +11,7 @@ add_sources(GlobalUnitSourceList
    UnitTestFieldUtils.C
    UnitTestGetDofStatus.C
    UnitTestHex27FaceNodeOrdering.C
-   UnitTestHexElementPromotion.C
+#   UnitTestHexElementPromotion.C
    UnitTestHexMasterElements.C
    UnitTestHexMasterElementsNgp.C
    UnitTestHexSCVDeterminant.C
@@ -29,7 +29,7 @@ add_sources(GlobalUnitSourceList
    UnitTestNGPMasterElements.C
    UnitTestNgpMesh1.C
    UnitTestPecletFunction.C
-   UnitTestQuadElementPromotion.C
+#   UnitTestQuadElementPromotion.C
    UnitTestRealm.C
    UnitTestScratchViews.C
    UnitTestShmemAlignment.C
@@ -38,11 +38,15 @@ add_sources(GlobalUnitSourceList
    UnitTestSidePCoords.C
    UnitTestSimdBasic.C
    UnitTestSimdContAdvElem.C
+   UnitTestSimdFieldGather.C
    UnitTestSimdMomentum.C
    UnitTestSingleHexPromotion.C
    UnitTestSpinnerLidarPattern.C
+   UnitTestSparsifiedLaplacianLHS.C
    UnitTestSuppAlgDataSharing.C
    UnitTestTpetra.C
+   UnitTestTpetraMeshManager.C
+   UnitTestTpetraMatrixFree.C
    UnitTestUtils.C
 )
 

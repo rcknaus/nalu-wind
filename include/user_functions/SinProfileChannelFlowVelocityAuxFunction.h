@@ -37,7 +37,9 @@ public:
     const unsigned endPos) const;
   
 private:
-  const double u_m;
+  const double ut_;
+  const double mu_;
+  const double delta_;
 };
 
 } // namespace nalu

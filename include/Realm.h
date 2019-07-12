@@ -539,6 +539,9 @@ class Realm {
 
   // mesh parts for all interior domains
   stk::mesh::PartVector interiorPartVec_;
+  stk::mesh::PartVector wallPartVec_;
+
+
 
   /** Vector holding side sets that have been registered with the boundary
    * conditions in the input file.
@@ -597,7 +600,7 @@ class Realm {
 
   // element promotion options
   bool doPromotion_; // conto
-  unsigned promotionOrder_;
+  unsigned polyOrder_;
   
   // id for the input mesh
   size_t inputMeshIdx_;
@@ -662,6 +665,9 @@ class Realm {
    * systems.
    */
   bool hypreIsActive_{false};
+
+  bool is_output_step();
+
 
 protected:
   std::unique_ptr<NgpMeshInfo> meshInfo_;

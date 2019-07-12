@@ -21,11 +21,8 @@ SinProfileChannelFlowVelocityAuxFunction::SinProfileChannelFlowVelocityAuxFuncti
   const unsigned beginPos,
   const unsigned endPos) :
   AuxFunction(beginPos, endPos),
-    u_m(10.0) /*,		// bulk velocity
-    pi_(acos(-1.0)) */
-{
-  // does nothing
-}
+    ut_(1), mu_(1./550.), delta_(1.)
+{}
 
 void
 SinProfileChannelFlowVelocityAuxFunction::do_evaluate(
@@ -38,17 +35,26 @@ SinProfileChannelFlowVelocityAuxFunction::do_evaluate(
   const unsigned /*beginPos*/,
   const unsigned /*endPos*/) const
 {
+  constexpr double correlation_factor = 1./0.09;
+  constexpr double correlation_power = 1./0.88;
+  const double Retau = ut_ * delta_ / mu_;
+  const auto u_bulk_est = 0.5 * mu_ / delta_ * std::pow(correlation_factor * Retau, correlation_power);
+
+  const double cos_integral = 4. / M_PI;
+  const double u_m = u_bulk_est / cos_integral;
+
+  const double x_center = M_PI;
+  const double y_center = delta_;
+  const double z_center = M_PI / 2;
+
   for(unsigned p=0; p < numPoints; ++p) {
+    const double x = coords[0] - x_center;
+    const double y = coords[1] - y_center;
+    const double z = coords[2] - z_center;
 
-    const double x = coords[0];
-    const double y = coords[1];
-    const double z = coords[2];
-
-    const double aux_x = (y > 1) ? 1.0 : -1.0;
-
-    fieldPtr[0] = u_m*sin(x)*aux_x;
-    fieldPtr[1] = 0.1*u_m*sin(y);
-    fieldPtr[2] = 0.1*u_m*sin(z);
+    fieldPtr[0] =  1.0*u_m*cos(0.5*M_PI*y); //profile matches bc
+    fieldPtr[1] =  0.1*u_m*cos(x)*cos(M_PI/2.0*y)*sin(2.0*z)*-2.0; // solenoidal comps
+    fieldPtr[2] =  0.1*u_m*cos(x)*sin(M_PI/2.0*y)*cos(2.0*z)*0.5*M_PI;
 
     fieldPtr += fieldSize;
     coords += spatialDimension;

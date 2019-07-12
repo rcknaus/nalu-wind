@@ -15,7 +15,6 @@
 namespace sierra {
 namespace nalu {
 
-
 // Tensor contractions for SIMD types
 // maybe specialize to switch to BLAS if value type is float/double
 

@@ -31,6 +31,7 @@
 
 namespace unit_test_utils {
 
+
 void fill_mesh_1_elem_per_proc_hex8(stk::mesh::BulkData& bulk)
 {
     int nprocs = bulk.parallel_size();
@@ -100,29 +101,31 @@ void fill_and_promote_hex_mesh(const std::string& meshSpec, stk::mesh::BulkData&
     stk::mesh::Part* blockPart = meta.get_part("block_1");
     stk::mesh::Part* surfPart = &meta.declare_part_with_topology("surface_1", stk::topology::QUAD_4);
 
-    auto elemDesc = sierra::nalu::ElementDescription::create(3,polyOrder);
+    if (polyOrder > 1) {
+      auto elemDesc = sierra::nalu::ElementDescription::create(3,polyOrder);
 
-    const std::string superName = sierra::nalu::super_element_part_name("block_1");
-    stk::topology topo = stk::create_superelement_topology(static_cast<unsigned>(elemDesc->nodesPerElement));
-    meta.declare_part_with_topology(superName, topo);
+      const std::string superName = sierra::nalu::super_element_part_name("block_1");
+      stk::topology topo = stk::create_superelement_topology(static_cast<unsigned>(elemDesc->nodesPerElement));
+      meta.declare_part_with_topology(superName, topo);
 
-    stk::mesh::Part* superSuperPart =
-        &meta.declare_part(sierra::nalu::super_element_part_name("surface_1"), stk::topology::FACE_RANK);
+      stk::mesh::Part* superSuperPart =
+          &meta.declare_part(sierra::nalu::super_element_part_name("surface_1"), stk::topology::FACE_RANK);
 
-    const auto sidePartName = sierra::nalu::super_subset_part_name("surface_1");
-    auto sideTopo = stk::create_superface_topology(static_cast<unsigned>(elemDesc->nodesPerSide));
-    stk::mesh::Part* superSidePart = &meta.declare_part_with_topology(sidePartName, sideTopo);
-    meta.declare_part_subset(*superSuperPart, *superSidePart);
+      const auto sidePartName = sierra::nalu::super_subset_part_name("surface_1");
+      auto sideTopo = stk::create_superface_topology(static_cast<unsigned>(elemDesc->nodesPerSide));
+      stk::mesh::Part* superSidePart = &meta.declare_part_with_topology(sidePartName, sideTopo);
+      meta.declare_part_subset(*superSuperPart, *superSidePart);
 
-    stk::mesh::Part* edgePart = &meta.declare_part("edge_part", stk::topology::EDGE_RANK);
-    stk::mesh::Part* facePart = &meta.declare_part("face_part", stk::topology::FACE_RANK);
+      stk::mesh::Part* edgePart = &meta.declare_part("edge_part", stk::topology::EDGE_RANK);
+      stk::mesh::Part* facePart = &meta.declare_part("face_part", stk::topology::FACE_RANK);
 
-    io.populate_bulk_data();
-    stk::mesh::create_exposed_block_boundary_sides(bulk, *blockPart, {surfPart});
+      io.populate_bulk_data();
+      stk::mesh::create_exposed_block_boundary_sides(bulk, *blockPart, {surfPart});
 
-    VectorFieldType* coords = meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "coordinates");
-    stk::mesh::PartVector baseParts = {blockPart, surfPart};
-    sierra::nalu::promotion::promote_elements(bulk, *elemDesc, *coords, baseParts, edgePart, facePart);
+      VectorFieldType* coords = meta.get_field<VectorFieldType>(stk::topology::NODE_RANK, "coordinates");
+      stk::mesh::PartVector baseParts = {blockPart, surfPart};
+      sierra::nalu::promotion::promote_elements(bulk, *elemDesc, *coords, baseParts, edgePart, facePart);
+    }
 }
 
 void dump_mesh(stk::mesh::BulkData& bulk, std::vector<stk::mesh::FieldBase*> fields, std::string name)

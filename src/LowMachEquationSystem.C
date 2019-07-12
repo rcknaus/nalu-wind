@@ -118,12 +118,13 @@
 #include <kernel/MomentumMassHOElemKernel.h>
 #include <kernel/MomentumAdvDiffHOElemKernel.h>
 #include <kernel/MomentumBuoyancySrcHOElemKernel.h>
+
 #include <kernel/PressurePoissonHOElemKernel.h>
 #include <kernel/ContinuityMassHOElemKernel.h>
 
 //mms kernels
+#include <user_functions/TGMMSElemKernel.h>
 #include <user_functions/TGMMSHOElemKernel.h>
-
 
 // bc kernels
 #include <kernel/ContinuityInflowElemKernel.h>
@@ -177,6 +178,8 @@
 #include <user_functions/VariableDensityMomentumSrcElemSuppAlg.h>
 #include <user_functions/VariableDensityMomentumSrcNodeSuppAlg.h>
 
+#include <user_functions/TGMMSMomentumSrcNodeSuppAlg.h>
+
 #include <user_functions/VariableDensityMomentumMMSHOElemKernel.h>
 #include <user_functions/VariableDensityContinuityMMSHOElemKernel.h>
 
@@ -203,6 +206,15 @@
 
 #include <user_functions/PerturbedShearLayerAuxFunctions.h>
 
+#include "MomentumSolver.h"
+#include "ContinuitySolver.h"
+
+#include "CVFEMNodalProjection.h"
+#include "CVFEMEffVisc.h"
+#include "CVFEMVolumes.h"
+#include "SimdFieldGather.h"
+
+
 // deprecated
 #include <ContinuityMassElemSuppAlgDep.h>
 #include <MomentumMassElemSuppAlgDep.h>
@@ -226,6 +238,7 @@
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/SkinMesh.hpp>
 #include <stk_mesh/base/Comm.hpp>
+
 
 // stk_topo
 #include <stk_topology/topology.hpp>
@@ -444,6 +457,20 @@ LowMachEquationSystem::register_interior_algorithm(
     }
   }
 }
+
+void
+LowMachEquationSystem::register_inflow_bc(
+  stk::mesh::Part *part,
+  const stk::topology& /*theTopo*/,
+  const InflowBoundaryConditionData& /*inflowBCData*/)
+{
+  stk::mesh::MetaData &metaData = realm_.meta_data();
+  if ( !realm_.solutionOptions_->activateOpenMdotCorrection_ ) {
+    VectorFieldType *theBcField = &(metaData.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "cont_velocity_bc"));
+    stk::mesh::put_field_on_mesh(*theBcField, *part, metaData.spatial_dimension(), nullptr);
+  }
+}
+
 
 //--------------------------------------------------------------------------
 //-------- register_open_bc ------------------------------------------------
@@ -682,20 +709,54 @@ LowMachEquationSystem::solve_and_update()
 {
   // wrap timing
   double timeA, timeB;
-  if ( isInit_ ) {
+  if (isInit_) {
     continuityEqSys_->compute_projected_nodal_gradient();
+  }
+
+  if (isInit_  && !MF::doMatrixFree) {
+    continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
+
+    timeA = NaluEnv::self().nalu_time();
+    field_axpby(
+      realm_.meta_data(),
+      realm_.bulk_data(),
+      1.0, *continuityEqSys_->pTmp_,
+      1.0, *continuityEqSys_->pressure_,
+      realm_.get_activate_aura());
+    timeB = NaluEnv::self().nalu_time();
+    continuityEqSys_->timerAssemble_ += (timeB-timeA);
+
     timeA = NaluEnv::self().nalu_time();
     continuityEqSys_->computeMdotAlgDriver_->execute();
-
+    project_nodal_velocity();
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerMisc_ += (timeB-timeA);
     isInit_ = false;
   }
 
-  // compute tvisc
-  momentumEqSys_->tviscAlgDriver_->execute();
+  if (isInit_ && MF::doMatrixFree) {
+    contSolv_ = std::make_shared<ContinuitySolver<MF::p>>(*continuityEqSys_);
+    contSolv_->create();
+    contSolv_->assemble_and_solve();
+    contSolv_->compute_mdot();
 
-  // compute effective viscosity
+    field_axpby(
+      realm_.meta_data(),
+      realm_.bulk_data(),
+      1.0, *continuityEqSys_->pTmp_,
+      1.0, *continuityEqSys_->pressure_,
+      realm_.get_activate_aura());
+
+    project_nodal_velocity();
+
+    momSolv_ = std::make_shared<MomentumSolver<MF::p>>(*momentumEqSys_);
+    momSolv_->create();
+    momSolv_->initialize();
+
+    isInit_ = false;
+  }
+
+  momentumEqSys_->tviscAlgDriver_->execute();
   momentumEqSys_->diffFluxCoeffAlgDriver_->execute();
 
   // start the iteration loop
@@ -705,10 +766,15 @@ LowMachEquationSystem::solve_and_update()
                     << std::setw(15) << std::right << userSuppliedName_ << std::endl;
 
     // momentum assemble, load_complete and solve
-    momentumEqSys_->assemble_and_solve(momentumEqSys_->uTmp_);
-
+    if(!MF::doMatrixFree) {
+      momentumEqSys_->assemble_and_solve(momentumEqSys_->uTmp_);
+    }
+    else {
+      momSolv_->assemble_and_solve(contSolv_->mdot());
+    }
     // update all of velocity
     timeA = NaluEnv::self().nalu_time();
+
     field_axpby(
       realm_.meta_data(),
       realm_.bulk_data(),
@@ -716,7 +782,7 @@ LowMachEquationSystem::solve_and_update()
       1.0, momentumEqSys_->velocity_->field_of_state(stk::mesh::StateNP1),
       realm_.get_activate_aura());
     timeB = NaluEnv::self().nalu_time();
-    momentumEqSys_->timerAssemble_ += (timeB-timeA);
+    momentumEqSys_->timerAssemble_ += (timeB - timeA);
 
     // compute velocity relative to mesh with new velocity
     realm_.compute_vrtm();
@@ -726,11 +792,16 @@ LowMachEquationSystem::solve_and_update()
       timeA = NaluEnv::self().nalu_time();
       continuityEqSys_->computeMdotAlgDriver_->execute();
       timeB = NaluEnv::self().nalu_time();
-      continuityEqSys_->timerMisc_ += (timeB-timeA);
+      continuityEqSys_->timerMisc_ += (timeB - timeA);
     }
 
     // continuity assemble, load_complete and solve
-    continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
+    if(!MF::doMatrixFree) {
+      continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
+    }
+    else{
+      contSolv_->assemble_and_solve();
+    }
 
     // update pressure
     timeA = NaluEnv::self().nalu_time();
@@ -743,11 +814,18 @@ LowMachEquationSystem::solve_and_update()
     timeB = NaluEnv::self().nalu_time();
     continuityEqSys_->timerAssemble_ += (timeB-timeA);
 
-    // compute mdot
-    timeA = NaluEnv::self().nalu_time();
-    continuityEqSys_->computeMdotAlgDriver_->execute();
-    timeB = NaluEnv::self().nalu_time();
-    continuityEqSys_->timerMisc_ += (timeB-timeA);
+    if (MF::doMatrixFree) {
+      timeA = NaluEnv::self().nalu_time();
+      contSolv_->compute_mdot();
+      timeB = NaluEnv::self().nalu_time();
+      continuityEqSys_->timerMisc_ += (timeB-timeA);
+    }
+    else {
+      timeA = NaluEnv::self().nalu_time();
+      continuityEqSys_->computeMdotAlgDriver_->execute();
+      timeB = NaluEnv::self().nalu_time();
+      continuityEqSys_->timerMisc_ += (timeB-timeA);
+    }
 
     // project nodal velocity
     project_nodal_velocity();
@@ -776,7 +854,24 @@ LowMachEquationSystem::solve_and_update()
     // we use this approach to avoid two evals per
     // solve/update since dudx is required for tke
     // production
-    momentumEqSys_->compute_projected_nodal_gradient();
+    if (MF::doMatrixFree) {
+      stk::mesh::field_fill(0.0,momentumEqSys_->dudx_->field_of_state(stk::mesh::StateNone));
+      nodal_average_gradient(
+        realm_.polyOrder_,
+        realm_.bulk_data(),
+        stk::mesh::selectUnion(realm_.interiorPartVec_),
+        momentumEqSys_->coordinates_->field_of_state(stk::mesh::StateNP1),
+        momentumEqSys_->velocity_->field_of_state(stk::mesh::StateNP1),
+        momentumEqSys_->dudx_->field_of_state(stk::mesh::StateNone)
+      );
+
+      if (realm_.hasPeriodic_) {
+        realm_.periodic_field_update(&momentumEqSys_->dudx_->field_of_state(stk::mesh::StateNone), 9);
+      }
+    }
+    else {
+      momentumEqSys_->compute_projected_nodal_gradient();
+    }
     timeA = NaluEnv::self().nalu_time();
     momentumEqSys_->compute_wall_function_params();
     timeB = NaluEnv::self().nalu_time();
@@ -797,43 +892,42 @@ LowMachEquationSystem::post_adapt_work()
 
   // at the very least, we need to populate ip values at edge/element
   if ( realm_.process_adaptivity() ) {
-    
+
     NaluEnv::self().naluOutputP0() << "--LowMachEquationSystem::post_adapt_work()" << std::endl;
 
     // compute new nodal pressure gradient
     continuityEqSys_->compute_projected_nodal_gradient();
-    
+
     // continuity assemble, load_complete and solve
     const bool solveCont = false;
     if ( solveCont ) {
 
       // compute new nodal pressure gradient
       continuityEqSys_->compute_projected_nodal_gradient();
-      
+
       continuityEqSys_->assemble_and_solve(continuityEqSys_->pTmp_);
-      
+
       // update pressure
       field_axpby(
-          realm_.meta_data(),
-          realm_.bulk_data(),
-          1.0, *continuityEqSys_->pTmp_,
-          1.0, *continuityEqSys_->pressure_,
-          realm_.get_activate_aura());
+        realm_.meta_data(),
+        realm_.bulk_data(),
+        1.0, *continuityEqSys_->pTmp_,
+        1.0, *continuityEqSys_->pressure_,
+        realm_.get_activate_aura());
     }
-    
+
     // compute mdot
     continuityEqSys_->computeMdotAlgDriver_->execute();
-    
+
     // project nodal velocity/gradU
     const bool processU = false;
     if ( processU ) {
       project_nodal_velocity();
       momentumEqSys_->assembleNodalGradAlgDriver_->execute();
     }
-    
+
     // compute wall function parameters (bip values)
     momentumEqSys_->compute_wall_function_params();
-    
   }
 
 }
@@ -844,8 +938,12 @@ LowMachEquationSystem::post_adapt_work()
 void
 LowMachEquationSystem::project_nodal_velocity()
 {
-
   stk::mesh::MetaData & meta_data = realm_.meta_data();
+
+  // time step
+  const double dt = realm_.get_time_step();
+  const double gamma1 = realm_.get_gamma1();
+  const double projTimeScale = dt/gamma1;
 
   const int nDim = meta_data.spatial_dimension();
 
@@ -855,24 +953,23 @@ LowMachEquationSystem::project_nodal_velocity()
   VectorFieldType *uTmp = momentumEqSys_->uTmp_;
   VectorFieldType *dpdx = continuityEqSys_->dpdx_;
   ScalarFieldType &densityNp1 = density_->field_of_state(stk::mesh::StateNP1);
-  ScalarFieldType *Udiag = momentumEqSys_->Udiag_;
 
   //==========================================================
   // save off dpdx to uTmp (do it everywhere)
   //==========================================================
- 
+
   // selector (everywhere dpdx lives) and node_buckets 
   stk::mesh::Selector s_nodes = stk::mesh::selectField(*dpdx);
   stk::mesh::BucketVector const& node_buckets =
-    realm_.get_buckets( stk::topology::NODE_RANK, s_nodes );
-  
+      realm_.get_buckets( stk::topology::NODE_RANK, s_nodes );
+
   for ( stk::mesh::BucketVector::const_iterator ib = node_buckets.begin() ;
-        ib != node_buckets.end() ; ++ib ) {
+      ib != node_buckets.end() ; ++ib ) {
     stk::mesh::Bucket & b = **ib ;
     const stk::mesh::Bucket::size_type length   = b.size();
     double * ut = stk::mesh::field_data(*uTmp, b);
     double * dp = stk::mesh::field_data(*dpdx, b);
-    
+
     for ( stk::mesh::Bucket::size_type k = 0 ; k < length ; ++k ) {
       const int offSet = k*nDim;
       for ( int j = 0; j < nDim; ++j ) {
@@ -889,30 +986,29 @@ LowMachEquationSystem::project_nodal_velocity()
   //==========================================================
   // project u, u^n+1 = u^k+1 - dt/rho*(Gjp^N+1 - uTmp);
   //==========================================================
-  
+
   // selector and node_buckets (only projected nodes)
   stk::mesh::Selector s_projected_nodes
-    = (!stk::mesh::selectUnion(momentumEqSys_->notProjectedPart_)) &
-    stk::mesh::selectField(*dpdx);
+  = (!stk::mesh::selectUnion(momentumEqSys_->notProjectedPart_)) &
+  stk::mesh::selectField(*dpdx);
   stk::mesh::BucketVector const& p_node_buckets =
-    realm_.get_buckets( stk::topology::NODE_RANK, s_projected_nodes );
-  
+      realm_.get_buckets( stk::topology::NODE_RANK, s_projected_nodes );
+
   // process loop
   for ( stk::mesh::BucketVector::const_iterator ib = p_node_buckets.begin() ;
-        ib != p_node_buckets.end() ; ++ib ) {
+      ib != p_node_buckets.end() ; ++ib ) {
     stk::mesh::Bucket & b = **ib ;
     const stk::mesh::Bucket::size_type length   = b.size();
     double * uNp1 = stk::mesh::field_data(velocityNp1, b);
     double * ut = stk::mesh::field_data(*uTmp, b);
     double * dp = stk::mesh::field_data(*dpdx, b);
     double * rho = stk::mesh::field_data(densityNp1, b);
-    double * udiagN = stk::mesh::field_data(*Udiag, b);
-    
+
     for ( stk::mesh::Bucket::size_type k = 0 ; k < length ; ++k ) {
-      
+
       // Get scaling factor
-      const double fac = 1.0/(rho[k] * udiagN[k]);
-      
+      const double fac = projTimeScale/rho[k];
+
       // projection step
       const size_t offSet = k*nDim;
       for ( int j = 0; j < nDim; ++j ) {
@@ -975,7 +1071,7 @@ MomentumEquationSystem::MomentumEquationSystem(
   // extract solver name and solver object
   std::string solverName = realm_.equationSystems_.get_solver_block_name("velocity");
   LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_MOMENTUM);
-  linsys_ = LinearSystem::create(realm_, realm_.spatialDimension_, this, solver);
+  linsys_ = LinearSystem::create(realm_, (MF::doMatrixFree) ? 1 : realm_.spatialDimension_, this, solver);
 
   // determine nodal gradient form
   set_nodal_gradient("velocity");
@@ -1053,6 +1149,10 @@ MomentumEquationSystem::register_nodal_fields(
   velocity_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "velocity", numStates));
   stk::mesh::put_field_on_mesh(*velocity_, *part, nDim, nullptr);
   realm_.augment_restart_variable_list("velocity");
+
+  provisionalVelocity_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_velocity"));
+  stk::mesh::put_field_on_mesh(*provisionalVelocity_, *part, nDim, nullptr);
+  realm_.augment_restart_variable_list("provisional_velocity");
 
   dudx_ =  &(meta_data.declare_field<GenericFieldType>(stk::topology::NODE_RANK, "dudx"));
   stk::mesh::put_field_on_mesh(*dudx_, *part, nDim*nDim, nullptr);
@@ -1160,7 +1260,7 @@ MomentumEquationSystem::register_interior_algorithm(
   }
 
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   // non-solver; contribution to Gjui; allow for element-based shifted
   if ( !managePNG_ ) {
@@ -1258,12 +1358,13 @@ MomentumEquationSystem::register_interior_algorithm(
       itsi->second->partVec_.push_back(part);
     }
   }
-  else {
+  else  if (!MF::doMatrixFree){
     // Homogeneous implementation
     if ( realm_.realmUsesEdges_ )
       throw std::runtime_error("MomentumElemSrcTerms::Error can not use element source terms for an edge-based scheme");
 
-    KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
+    //realm_.using_tensor_product_kernels()
+    KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_,realm_.using_tensor_product_kernels());
     auto& dataPreReqs = kb.data_prereqs();
     auto& dataPreReqsHO = kb.data_prereqs_HO();
 
@@ -1347,43 +1448,46 @@ MomentumEquationSystem::register_interior_algorithm(
       ("lumped_EarthCoriolis",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_, dataPreReqs, true);
 
+    kb.build_topo_kernel_if_requested<TGMMSElemKernel>
+      ("tgmms",
+        realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqs);
+
     kb.build_sgl_kernel_if_requested<MomentumAdvDiffHOElemKernel>
-      ("experimental_ho_advection_diffusion",
+      ("advection_diffusion",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_,
        realm_.is_turbulent()? evisc_ : visc_,
        dataPreReqsHO, false);
 
     kb.build_sgl_kernel_if_requested<MomentumAdvDiffHOElemKernel>
-      ("experimental_ho_advection_diffusion_reduced_sens",
+      ("advection_diffusion_reduced_sens",
        realm_.bulk_data(), *realm_.solutionOptions_, velocity_,
        realm_.is_turbulent()? evisc_ : visc_,
        dataPreReqsHO, true);
 
     kb.build_sgl_kernel_if_requested<MomentumMassHOElemKernel>
-      ("experimental_ho_momentum_time_derivative",
+      ("momentum_time_derivative",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<TGMMSHOElemKernel>
-      ("experimental_ho_tgmms",
+      ("tgmms",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<VariableDensityMomentumMMSHOElemKernel>
-      ("experimental_ho_vdmms",
+      ("vdmms",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.build_sgl_kernel_if_requested<MomentumBuoyancySrcHOElemKernel>
-      ("experimental_ho_buoyancy",
+      ("buoyancy",
         realm_.bulk_data(), *realm_.solutionOptions_,  dataPreReqsHO);
 
     kb.report();
- 
-  }
+   }
 
   // Check if the user has requested CMM or LMM algorithms; if so, do not
   // include Nodal Mass algorithms
   std::vector<std::string> checkAlgNames = {"momentum_time_derivative",
                                             "lumped_momentum_time_derivative",
-                                            "experimental_ho_momentum_time_derivative"};
+                                            "momentum_time_derivative"};
   bool elementMassAlg = supp_alg_is_requested(checkAlgNames);
   // solver; time contribution (lumped mass matrix)
   if ( !elementMassAlg || nodal_src_is_requested() ) {
@@ -1560,7 +1664,7 @@ MomentumEquationSystem::register_inflow_bc(
 
   // velocity np1
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   stk::mesh::MetaData &meta_data = realm_.meta_data();
   const unsigned nDim = meta_data.spatial_dimension();
@@ -1615,6 +1719,9 @@ MomentumEquationSystem::register_inflow_bc(
     else if ( fcnName == "kovasznay") {
       theAuxFunc = new KovasznayVelocityAuxFunction(0,nDim);
     }
+    else if ( fcnName == "OneTwoTenVelocity" ) {
+      theAuxFunc = new OneTwoTenVelocityAuxFunction(0,nDim);
+    }
     else {
       throw std::runtime_error("MomentumEquationSystem::register_inflow_bc: limited functions supported");
     }
@@ -1661,13 +1768,11 @@ MomentumEquationSystem::register_inflow_bc(
     }
   }
 
-  // Dirichlet bc
-  std::map<AlgorithmType, SolverAlgorithm *>::iterator itd =
-    solverAlgDriver_->solverDirichAlgMap_.find(algType);
+  // solver; lhs
+  auto itd = solverAlgDriver_->solverDirichAlgMap_.find(algType);
   if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
-    DirichletBC *theAlg
-      = new DirichletBC(realm_, this, part, &velocityNp1, theBcField, 0, nDim);
-    solverAlgDriver_->solverDirichAlgMap_[algType] = theAlg;
+    solverAlgDriver_->solverDirichAlgMap_[algType] =
+        new DirichletBC(realm_, this, part, &velocityNp1, theBcField, 0, nDim);
   }
   else {
     itd->second->partVec_.push_back(part);
@@ -1716,7 +1821,7 @@ MomentumEquationSystem::register_open_bc(
   bcDataAlg_.push_back(auxAlg);
 
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   // non-solver; contribution to Gjui; allow for element-based shifted
   if ( !managePNG_ ) {
@@ -1799,7 +1904,7 @@ MomentumEquationSystem::register_wall_bc(
 
   // np1 velocity
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   stk::mesh::MetaData &meta_data = realm_.meta_data();
   const unsigned nDim = meta_data.spatial_dimension();
@@ -1909,6 +2014,7 @@ MomentumEquationSystem::register_wall_bc(
       it->second->partVec_.push_back(part);
     }
   }
+
 
   // Dirichlet or wall function bc
   if ( anyWallFunctionActivated ) {
@@ -2070,6 +2176,8 @@ MomentumEquationSystem::register_wall_bc(
     }
   }
   else {
+    if (MF::doMatrixFree) return;
+
     const AlgorithmType algType = WALL;
     
     std::map<AlgorithmType, SolverAlgorithm *>::iterator itd =
@@ -2104,7 +2212,7 @@ MomentumEquationSystem::register_symmetry_bc(
   const AlgorithmType algType = SYMMETRY;
 
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   // non-solver; contribution to Gjui; allow for element-based shifted
   if ( !managePNG_ ) {
@@ -2198,7 +2306,7 @@ MomentumEquationSystem::register_abltop_bc(
   auto user_data = abltopBCData.userData_;
 
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   // push mesh part
   notProjectedPart_.push_back(part);
@@ -2288,7 +2396,7 @@ MomentumEquationSystem::register_non_conformal_bc(
   const AlgorithmType algType = NON_CONFORMAL;
 
   VectorFieldType &velocityNp1 = velocity_->field_of_state(stk::mesh::StateNP1);
-  GenericFieldType &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
+  auto &dudxNone = dudx_->field_of_state(stk::mesh::StateNone);
 
   stk::mesh::MetaData &meta_data = realm_.meta_data();
 
@@ -2367,6 +2475,16 @@ MomentumEquationSystem::register_overset_bc()
 void
 MomentumEquationSystem::initialize()
 {
+  if (MF::doMatrixFree) {
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
+    tpetralinsys.buildSparsifiedReducedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
+    linsys_->finalizeLinearSystem();
+    const double dt = realm_.get_time_step();
+    const double gamma1 = realm_.get_gamma1();
+    stk::mesh::field_fill(gamma1/dt, *Udiag_);
+    return;
+  }
+
   solverAlgDriver_->initialize_connectivity();
   linsys_->finalizeLinearSystem();
 
@@ -2755,8 +2873,15 @@ ContinuityEquationSystem::register_nodal_fields(
   stk::mesh::put_field_on_mesh(*pressure_, *part, nullptr);
   realm_.augment_restart_variable_list("pressure");
 
+  provisionalPressure_ =  &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "provisional_pressure"));
+  stk::mesh::put_field_on_mesh(*provisionalPressure_, *part, nullptr);
+  realm_.augment_restart_variable_list("provisional_pressure");
+
   dpdx_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "dpdx"));
   stk::mesh::put_field_on_mesh(*dpdx_, *part, nDim, nullptr);
+
+  provisionalDpdx_ =  &(meta_data.declare_field<VectorFieldType>(stk::topology::NODE_RANK, "provisional_dpdx"));
+  stk::mesh::put_field_on_mesh(*provisionalDpdx_, *part, nDim, nullptr);
 
   // delta solution for linear solver; share delta with other split systems
   pTmp_ =  &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "pTmp"));
@@ -2822,6 +2947,8 @@ ContinuityEquationSystem::register_interior_algorithm(
       it->second->partVec_.push_back(part);
     }
   }
+
+  if (MF::doMatrixFree) return;
 
   if ( !elementContinuityEqs_ ) {
 
@@ -2912,6 +3039,7 @@ ContinuityEquationSystem::register_interior_algorithm(
       if ( realm_.realmUsesEdges_ )
         throw std::runtime_error("ContinuityElemSrcTerms::Error can not use element source terms for an edge-based scheme");
 
+      //realm_.using_tensor_product_kernels()
       KernelBuilder kb(*this, *part, solverAlgDriver_->solverAlgorithmMap_, realm_.using_tensor_product_kernels());
 
       kb.build_topo_kernel_if_requested<ContinuityMassElemKernel>
@@ -2926,24 +3054,20 @@ ContinuityEquationSystem::register_interior_algorithm(
       ("advection",
         realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs());
 
-      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
-      ("experimental_ho_density_time_derivative",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
-
-      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
-      ("experimental_ho_density_time_derivative",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
-
       kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
-      ("experimental_ho_advection",
-        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), false);
-
-      kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
-      ("experimental_ho_advection_reduced_sens",
+      ("advection_reduced_sens",
         realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), true);
 
+      kb.build_sgl_kernel_if_requested<PressurePoissonHOElemKernel>
+      ("advection",
+        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO(), false);
+
+      kb.build_sgl_kernel_if_requested<ContinuityMassHOElemKernel>
+      ("density_time_derivative",
+        realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
+
       kb.build_sgl_kernel_if_requested<VariableDensityContinuityMMSHOElemKernel>
-        ("experimental_ho_vdmms",
+        ("vdmms",
           realm_.bulk_data(), *realm_.solutionOptions_, kb.data_prereqs_HO());
 
       kb.report();
@@ -3074,6 +3198,9 @@ ContinuityEquationSystem::register_inflow_bc(
       else if ( fcnName == "BoussinesqNonIso") {
         theAuxFunc = new BoussinesqNonIsoVelocityAuxFunction(0, nDim);
       }
+      else if ( fcnName == "OneTwoTenVelocity" ) {
+        theAuxFunc = new OneTwoTenVelocityAuxFunction(0,nDim);
+      }
       else {
         throw std::runtime_error("ContEquationSystem::register_inflow_bc: limited functions supported");
       }
@@ -3131,7 +3258,6 @@ ContinuityEquationSystem::register_inflow_bc(
   
   // solver; lhs
   if ( realm_.solutionOptions_->useConsolidatedBcSolverAlg_ ) {      
-
     auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
     
     AssembleElemSolverAlgorithm* solverAlg = nullptr;
@@ -3299,7 +3425,7 @@ ContinuityEquationSystem::register_wall_bc(
   const stk::topology &/*theTopo*/,
   const WallBoundaryConditionData & /* wallBCData */)
 {
-
+  if (MF::doMatrixFree) { return;}
   // algorithm type
   const AlgorithmType algType = WALL;
 
@@ -3622,6 +3748,14 @@ ContinuityEquationSystem::register_overset_bc()
 void
 ContinuityEquationSystem::initialize()
 {
+  if (MF::doMatrixFree) {
+    ThrowRequire(dynamic_cast<TpetraLinearSystem*>(linsys_) != nullptr);
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
+    tpetralinsys.buildSparsifiedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
+    linsys_->finalizeLinearSystem();
+    return;
+  }
+
   if (realm_.solutionOptions_->needPressureReference_) {
     const AlgorithmType algType = REF_PRESSURE;
     // Process parts if necessary

@@ -116,7 +116,11 @@ namespace {
       std::cout << "Over " << nRuns << " runs, avg time for diffusion metric: " <<
           std::chrono::duration_cast<std::chrono::duration<double>>(end_metric - start_clock).count()/(double)nRuns
           << "s" << std::endl;
+
+      std::cout << "size_of:" << sizeof(CVFEMOperators<p, double>) << std::endl;
+
     }
+
 
 }
 

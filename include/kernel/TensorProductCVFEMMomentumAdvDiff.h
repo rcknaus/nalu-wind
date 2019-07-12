@@ -12,20 +12,21 @@
 #include <master_element/Hex8GeometryFunctions.h>
 #include <master_element/DirectionMacros.h>
 #include <CVFEMTypeDefs.h>
+#include "Kokkos_Array.hpp"
 
 namespace sierra {
 namespace nalu {
 namespace tensor_assembly {
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void momentum_advdiff_xhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_scalar_view<poly_order, Scalar>& mdot,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_vector_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_vector_view<p, Scalar>& lhs,
   bool reduced_sens = false)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
 
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
@@ -130,15 +131,15 @@ void momentum_advdiff_xhat_contrib(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void momentum_advdiff_yhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_scalar_view<poly_order, Scalar>& mdot,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_vector_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_vector_view<p, Scalar>& lhs,
   bool reduced_sens = false)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
@@ -239,15 +240,15 @@ void momentum_advdiff_yhat_contrib(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void momentum_advdiff_zhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_scalar_view<poly_order, Scalar>& mdot,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_vector_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_vector_view<p, Scalar>& lhs,
   bool reduced_sens = false)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
 
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
@@ -363,17 +364,19 @@ void area_weighted_face_normal_shear_stress(
   // haven't decided on a more general way to separate out the space transformation
   // from the assembly
 
+  constexpr double one_third = 0.333333333333333;
+
   NALU_ALIGNED Scalar base_box[3][8];
   hex_vertex_coordinates<p, Scalar>(xc, base_box);
 
   const auto& nodalInterp = ops.mat_.linearNodalInterp;
   const auto& scsInterp = ops.mat_.linearScsInterp;
 
-  nodal_tensor_workview<p, Scalar> work_gradh(0);
-  auto& gradu_scs = work_gradh.view();
+  nodal_tensor_array<Scalar, p> work_gradu;
+  auto gradu_scs = la::make_view(work_gradu);
 
-  nodal_scalar_workview<p, Scalar> work_visc_scs(0);
-  auto& visc_scs = work_visc_scs.view();
+  nodal_scalar_array<Scalar, p> work_visc_scs;
+  auto visc_scs = la::make_view(work_visc_scs);
 
   ops.scs_xhat_grad(vel, gradu_scs);
   ops.scs_xhat_interp(visc, visc_scs);
@@ -410,8 +413,7 @@ void area_weighted_face_normal_shear_stress(
         areav[YH] *= inv_detj;
         areav[ZH] *= inv_detj;
 
-        const Scalar one_third_divu = 1.0/3.0 * (
-            local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
 
         tau_dot_a(XH, k, j, i, XH) =
             (local_grad[XH][XH] - one_third_divu) * areav[XH]
@@ -424,9 +426,9 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(XH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
-          + (local_grad[ZH][ZH] - one_third_divu)* areav[ZH];
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
     }
   }
@@ -466,8 +468,7 @@ void area_weighted_face_normal_shear_stress(
         areav[YH] *= inv_detj;
         areav[ZH] *= inv_detj;
 
-        const Scalar one_third_divu = 1.0/3.0 * (
-            local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
 
         tau_dot_a(YH, k, j, i, XH) =
             (local_grad[XH][XH] - one_third_divu) * areav[XH]
@@ -480,7 +481,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(YH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
@@ -521,8 +522,7 @@ void area_weighted_face_normal_shear_stress(
         areav[YH] *= inv_detj;
         areav[ZH] *= inv_detj;
 
-        const Scalar one_third_divu = 1.0/3.0 * (
-            local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
 
         tau_dot_a(ZH, k, j, i, XH) =
             (local_grad[XH][XH] - one_third_divu) * areav[XH]
@@ -535,7 +535,7 @@ void area_weighted_face_normal_shear_stress(
           + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH];
 
         tau_dot_a(ZH, k, j, i, ZH) =
-            0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[XH]
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
           + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
           + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH];
       }
@@ -543,12 +543,12 @@ void area_weighted_face_normal_shear_stress(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void momentum_advdiff_lhs(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_scalar_view<poly_order, Scalar>& mdot,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_vector_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_vector_view<p, Scalar>& lhs,
   bool reduced_sens = false)
 {
   momentum_advdiff_xhat_contrib(ops, mdot, metric, lhs, reduced_sens);
@@ -556,27 +556,233 @@ void momentum_advdiff_lhs(
   momentum_advdiff_zhat_contrib(ops, mdot, metric, lhs, reduced_sens);
 }
 
-template <int poly_order, typename Scalar>
-void momentum_advdiff_rhs(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& tau_dot_a,
-  const scs_scalar_view<poly_order, Scalar>& mdot,
-  const nodal_vector_view<poly_order, Scalar>& velocity,
-  nodal_vector_view<poly_order, Scalar>& rhs)
-{
-  constexpr int n1D = poly_order + 1;
-  constexpr int nscs = poly_order;
 
-  nodal_vector_workview<poly_order, Scalar> work_integrand(0);
+template <int p, typename Scalar>
+void momentum_block_rhs(
+  const CVFEMOperators<p, Scalar>& ops,
+  const nodal_vector_view<p, Scalar>& xc,
+  const nodal_scalar_view<p, Scalar>& visc,
+  const nodal_vector_view<p, Scalar>& vel,
+  const scs_scalar_view<p, Scalar>& mdot,
+  nodal_vector_view<p, Scalar>& rhs)
+{
+  // haven't decided on a more general way to separate out the space transformation
+  // from the assembly
+
+  constexpr double one_third = 0.33333333333333333;
+
+  NALU_ALIGNED Scalar base_box[3][8];
+  hex_vertex_coordinates<p, Scalar>(xc, base_box);
+
+  const auto& nodalInterp = ops.mat_.linearNodalInterp;
+  const auto& scsInterp = ops.mat_.linearScsInterp;
+
+  nodal_tensor_array<Scalar, p> work_gradu;
+  auto gradu_scs = la::make_view(work_gradu);
+
+  nodal_scalar_array<Scalar, p> work_visc_scs;
+  auto visc_scs = la::make_view(work_visc_scs);
+
+  nodal_vector_array<Scalar, p> work_integrand;
+  auto integrand = la::make_view(work_integrand);
+
+  nodal_vector_array<Scalar, p> work_vel_scs;
+  auto vel_scs = la::make_view(work_vel_scs);
+
+  ops.scs_xhat_grad(vel, gradu_scs);
+  ops.scs_xhat_interp(vel, vel_scs);
+  ops.scs_xhat_interp(visc, visc_scs);
+  for (int k = 0; k < p + 1; ++k) {
+    NALU_ALIGNED const Scalar interpk[2] = { nodalInterp(0, k), nodalInterp(1, k) };
+    for (int j = 0; j < p + 1; ++j) {
+      NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
+      for (int i = 0; i < p; ++i) {
+        NALU_ALIGNED const Scalar interpi[2] = { scsInterp(0, i), scsInterp(1, i) };
+
+        NALU_ALIGNED Scalar jact[3][3];
+        hex_jacobian_t(base_box, interpi, interpj, interpk, jact);
+
+        NALU_ALIGNED Scalar adjJac[3][3];
+        adjugate_matrix33(jact, adjJac);
+
+        NALU_ALIGNED Scalar local_grad[3][3];
+        for (int d = 0; d < 3; ++d) {
+          local_grad[d][XH] = adjJac[XH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[XH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[XH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][YH] = adjJac[YH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[YH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[YH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][ZH] = adjJac[ZH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[ZH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[ZH][ZH] * gradu_scs(k, j, i, d, ZH);
+        }
+
+        NALU_ALIGNED Scalar areav[3];
+        areav_from_jacobian_t<XH>(jact, areav);
+
+        const Scalar inv_detj = 2 * visc_scs(k, j, i) /
+            (jact[0][0] * adjJac[0][0] + jact[1][0] * adjJac[1][0] + jact[2][0] * adjJac[2][0]);
+
+        areav[XH] *= inv_detj;
+        areav[YH] *= inv_detj;
+        areav[ZH] *= inv_detj;
+
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar mdot_h = mdot(XH, k, j, i);
+
+        integrand(k, j, i, XH) =
+            (local_grad[XH][XH] - one_third_divu) * areav[XH]
+            + 0.5 * (local_grad[XH][YH] + local_grad[YH][XH]) * areav[YH]
+            + 0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, XH);
+
+        integrand(k, j, i, YH) =
+            0.5 * (local_grad[YH][XH] + local_grad[XH][YH]) * areav[XH]
+          + (local_grad[YH][YH] - one_third_divu) * areav[YH]
+          + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, YH);
+
+        integrand(k, j, i, ZH) =
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
+          + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH] - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_xhat(integrand, rhs);
+
+  ops.scs_yhat_grad(vel, gradu_scs);
+  ops.scs_yhat_interp(vel, vel_scs);
+  ops.scs_yhat_interp(visc, visc_scs);
+  for (int k = 0; k < p + 1; ++k) {
+    NALU_ALIGNED const Scalar interpk[2] = { nodalInterp(0, k), nodalInterp(1, k) };
+    for (int j = 0; j < p; ++j) {
+      NALU_ALIGNED const Scalar interpj[2] = { scsInterp(0, j), scsInterp(1, j) };
+      for (int i = 0; i < p+1; ++i) {
+        NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
+
+        NALU_ALIGNED Scalar jact[3][3];
+        hex_jacobian_t(base_box, interpi, interpj, interpk, jact);
+
+        NALU_ALIGNED Scalar adjJac[3][3];
+        adjugate_matrix33(jact, adjJac);
+
+        NALU_ALIGNED Scalar local_grad[3][3];
+        for (int d = 0; d < 3; ++d) {
+          local_grad[d][XH] = adjJac[XH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[XH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[XH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][YH] = adjJac[YH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[YH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[YH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][ZH] = adjJac[ZH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[ZH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[ZH][ZH] * gradu_scs(k, j, i, d, ZH);
+        }
+
+        NALU_ALIGNED Scalar areav[3];
+        areav_from_jacobian_t<YH>(jact, areav);
+
+        const Scalar inv_detj = 2 * visc_scs(k, j, i) /
+            (jact[0][0] * adjJac[0][0] + jact[1][0] * adjJac[1][0] + jact[2][0] * adjJac[2][0]);
+
+        areav[XH] *= inv_detj;
+        areav[YH] *= inv_detj;
+        areav[ZH] *= inv_detj;
+
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar mdot_h = mdot(YH, k, j, i);
+
+        integrand(k, j, i, XH) =
+            (local_grad[XH][XH] - one_third_divu) * areav[XH]
+            + 0.5 * (local_grad[XH][YH] + local_grad[YH][XH]) * areav[YH]
+            + 0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, XH);
+
+        integrand(k, j, i, YH) =
+            0.5 * (local_grad[YH][XH] + local_grad[XH][YH]) * areav[XH]
+          + (local_grad[YH][YH] - one_third_divu) * areav[YH]
+          + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, YH);
+
+        integrand(k, j, i, ZH) =
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
+          + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH] - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_yhat(integrand, rhs);
+
+  ops.scs_zhat_grad(vel, gradu_scs);
+  ops.scs_zhat_interp(vel, vel_scs);
+  ops.scs_zhat_interp(visc, visc_scs);
+  for (int k = 0; k < p ; ++k) {
+    NALU_ALIGNED const Scalar interpk[2] = { scsInterp(0, k), scsInterp(1, k) };
+    for (int j = 0; j < p + 1; ++j) {
+      NALU_ALIGNED const Scalar interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
+      for (int i = 0; i < p + 1; ++i) {
+        NALU_ALIGNED const Scalar interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
+
+        NALU_ALIGNED Scalar jact[3][3];
+        hex_jacobian_t(base_box, interpi, interpj, interpk, jact);
+
+        NALU_ALIGNED Scalar adjJac[3][3];
+        adjugate_matrix33(jact, adjJac);
+
+        NALU_ALIGNED Scalar local_grad[3][3];
+        for (int d = 0; d < 3; ++d) {
+          local_grad[d][XH] = adjJac[XH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[XH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[XH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][YH] = adjJac[YH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[YH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[YH][ZH] * gradu_scs(k, j, i, d, ZH);
+          local_grad[d][ZH] = adjJac[ZH][XH] * gradu_scs(k, j, i, d, XH)
+              + adjJac[ZH][YH] * gradu_scs(k, j, i, d, YH) + adjJac[ZH][ZH] * gradu_scs(k, j, i, d, ZH);
+        }
+
+        NALU_ALIGNED Scalar areav[3];
+        areav_from_jacobian_t<ZH>(jact, areav);
+        const Scalar inv_detj = 2 * visc_scs(k, j, i) /
+            (jact[0][0] * adjJac[0][0] + jact[1][0] * adjJac[1][0] + jact[2][0] * adjJac[2][0]);
+
+        areav[XH] *= inv_detj;
+        areav[YH] *= inv_detj;
+        areav[ZH] *= inv_detj;
+
+        const Scalar one_third_divu = one_third * (local_grad[XH][XH]  + local_grad[YH][YH] + local_grad[ZH][ZH]);
+        const Scalar mdot_h = mdot(ZH, k, j, i);
+
+        integrand(k, j, i, XH) =
+            (local_grad[XH][XH] - one_third_divu) * areav[XH]
+            + 0.5 * (local_grad[XH][YH] + local_grad[YH][XH]) * areav[YH]
+            + 0.5 * (local_grad[XH][ZH] + local_grad[ZH][XH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, XH);
+
+        integrand(k, j, i, YH) =
+            0.5 * (local_grad[YH][XH] + local_grad[XH][YH]) * areav[XH]
+          + (local_grad[YH][YH] - one_third_divu) * areav[YH]
+          + 0.5 * (local_grad[YH][ZH] + local_grad[ZH][YH]) * areav[ZH] - mdot_h * vel_scs(k, j, i, YH);
+
+        integrand(k, j, i, ZH) =
+            0.5 * (local_grad[ZH][XH] + local_grad[XH][ZH]) * areav[XH]
+          + 0.5 * (local_grad[ZH][YH] + local_grad[YH][ZH]) * areav[YH]
+          + (local_grad[ZH][ZH] - one_third_divu) * areav[ZH] - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_zhat(integrand, rhs);
+}
+
+template <int p, typename Scalar>
+void momentum_advdiff_rhs(
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& tau_dot_a,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const nodal_vector_view<p, Scalar>& velocity,
+  nodal_vector_view<p, Scalar>& rhs)
+{
+  static constexpr int n1D = p + 1;
+
+  nodal_vector_workview<p, Scalar> work_integrand(0);
   auto& integrand = work_integrand.view();
 
-  nodal_vector_workview<poly_order, Scalar> work_vel_scs(0);
+  nodal_vector_workview<p, Scalar> work_vel_scs(0);
   auto& vel_scs = work_vel_scs.view();
 
   ops.scs_xhat_interp(velocity, vel_scs);
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
-      for (int i = 0; i < nscs; ++i) {
+      for (int i = 0; i < p; ++i) {
         integrand(k, j, i, XH) = tau_dot_a(XH, k, j, i, XH) - mdot(XH, k, j, i) * vel_scs(k, j, i, XH);
         integrand(k, j, i, YH) = tau_dot_a(XH, k, j, i, YH) - mdot(XH, k, j, i) * vel_scs(k, j, i, YH);
         integrand(k, j, i, ZH) = tau_dot_a(XH, k, j, i, ZH) - mdot(XH, k, j, i) * vel_scs(k, j, i, ZH);
@@ -587,7 +793,7 @@ void momentum_advdiff_rhs(
 
   ops.scs_yhat_interp(velocity, vel_scs);
   for (int k = 0; k < n1D; ++k) {
-    for (int j = 0; j < nscs; ++j) {
+    for (int j = 0; j < p; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i, XH) = tau_dot_a(YH, k, j, i, XH) - mdot(YH, k, j, i) * vel_scs(k, j, i, XH);
         integrand(k, j, i, YH) = tau_dot_a(YH, k, j, i, YH) - mdot(YH, k, j, i) * vel_scs(k, j, i, YH);
@@ -598,12 +804,193 @@ void momentum_advdiff_rhs(
   ops.integrate_and_diff_yhat(integrand, rhs);
 
   ops.scs_zhat_interp(velocity, vel_scs);
-  for (int k = 0; k < nscs; ++k) {
+  for (int k = 0; k < p; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i, XH) = tau_dot_a(ZH, k, j, i, XH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, XH);
         integrand(k, j, i, YH) = tau_dot_a(ZH, k, j, i, YH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, YH);
         integrand(k, j, i, ZH) = tau_dot_a(ZH, k, j, i, ZH) - mdot(ZH, k, j, i) * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_zhat(integrand, rhs);
+}
+
+template <int p, typename Scalar>
+void split_momentum_advdiff_rhs(
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const nodal_vector_view<p, Scalar>& delta,
+  nodal_vector_view<p, Scalar>& rhs)
+{
+  // linearized, dimensionally-split rhs
+  static constexpr int n1D = p + 1;
+
+  nodal_vector_array<Scalar, p> work_integrand;
+  auto integrand = la::make_view(work_integrand);
+
+  nodal_vector_array<Scalar, p> work_vel_scs;
+  auto vel_scs = la::make_view(work_vel_scs);
+
+  nodal_tensor_array<Scalar, p> work_grad_u;
+  auto grad_vel_scs = la::make_view(work_grad_u);
+
+  ops.scs_xhat_grad(delta, grad_vel_scs);
+  ops.scs_xhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < p; ++i) {
+        NALU_ALIGNED const Kokkos::Array<Scalar, 3> vmetric = {{
+            metric(XH, k, j, i, XH),
+            metric(XH, k, j, i, YH),
+            metric(XH, k, j, i, ZH)
+        }};
+
+        const auto mdot_h = mdot(XH, k, j, i);
+        work_integrand(k, j, i, XH) = vmetric[XH] * grad_vel_scs(k, j, i, XH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, XH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, XH, ZH)
+                               - mdot_h * vel_scs(k, j, i, XH);
+
+        work_integrand(k, j, i, YH) = vmetric[XH] * grad_vel_scs(k, j, i, YH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, YH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, YH, ZH)
+                               - mdot_h * vel_scs(k, j, i, YH);
+
+        work_integrand(k, j, i, ZH) = vmetric[XH] * grad_vel_scs(k, j, i, ZH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, ZH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, ZH, ZH)
+                               - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_xhat(integrand, rhs);
+
+  ops.scs_yhat_grad(delta, grad_vel_scs);
+  ops.scs_yhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < p; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        NALU_ALIGNED const Kokkos::Array<Scalar, 3> vmetric = {{
+            metric(YH, k, j, i, XH),
+            metric(YH, k, j, i, YH),
+            metric(YH, k, j, i, ZH)
+        }};
+
+        const auto mdot_h = mdot(YH, k, j, i);
+
+        work_integrand(k, j, i, XH) = vmetric[XH] * grad_vel_scs(k, j, i, XH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, XH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, XH, ZH)
+                               - mdot_h * vel_scs(k, j, i, XH);
+
+        work_integrand(k, j, i, YH) = vmetric[XH] * grad_vel_scs(k, j, i, YH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, YH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, YH, ZH)
+                               - mdot_h * vel_scs(k, j, i, YH);
+
+        work_integrand(k, j, i, ZH) = vmetric[XH] * grad_vel_scs(k, j, i, ZH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, ZH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, ZH, ZH)
+                               - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_yhat(integrand, rhs);
+
+  ops.scs_zhat_grad(delta, grad_vel_scs);
+  ops.scs_zhat_interp(delta, vel_scs);
+  for (int k = 0; k < p; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        NALU_ALIGNED const Kokkos::Array<Scalar, 3> vmetric = {{
+            metric(ZH, k, j, i, XH),
+            metric(ZH, k, j, i, YH),
+            metric(ZH, k, j, i, ZH)
+        }};
+
+        const auto mdot_h = mdot(ZH, k, j, i);
+
+        work_integrand(k, j, i, XH) = vmetric[XH] * grad_vel_scs(k, j, i, XH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, XH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, XH, ZH)
+                               - mdot_h * vel_scs(k, j, i, XH);
+
+        work_integrand(k, j, i, YH) = vmetric[XH] * grad_vel_scs(k, j, i, YH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, YH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, YH, ZH)
+                               - mdot_h * vel_scs(k, j, i, YH);
+
+
+        work_integrand(k, j, i, ZH) = vmetric[XH] * grad_vel_scs(k, j, i, ZH, XH)
+                               + vmetric[YH] * grad_vel_scs(k, j, i, ZH, YH)
+                               + vmetric[ZH] * grad_vel_scs(k, j, i, ZH, ZH)
+                               - mdot_h * vel_scs(k, j, i, ZH);
+      }
+    }
+  }
+  ops.integrate_and_diff_zhat(integrand, rhs);
+}
+
+template <int p, typename Scalar>
+void split_momentum_advdiff_rhs(
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  const scs_scalar_view<p, Scalar>& mdot,
+  const nodal_scalar_view<p, Scalar>& delta,
+  nodal_scalar_view<p, Scalar>& rhs)
+{
+  // linearized, dimensionally-split rhs
+
+  static constexpr int n1D = p + 1;
+
+  nodal_scalar_array<Scalar, p> work_integrand;
+  auto integrand = la::make_view(work_integrand);
+
+  nodal_scalar_array<Scalar, p> work_vel_scs;
+  auto vel_scs = la::make_view(work_vel_scs);
+
+  nodal_vector_array<Scalar, p> work_grad_u;
+  auto grad_vel_scs = la::make_view(work_grad_u);
+
+  ops.scs_xhat_grad(delta, grad_vel_scs);
+  ops.scs_xhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < p; ++i) {
+        work_integrand(k, j, i) = metric(XH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(XH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(XH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH)
+                                - mdot(XH, k, j, i) * vel_scs(k, j, i);
+      }
+    }
+  }
+  ops.integrate_and_diff_xhat(integrand, rhs);
+
+  ops.scs_yhat_grad(delta, grad_vel_scs);
+  ops.scs_yhat_interp(delta, vel_scs);
+  for (int k = 0; k < n1D; ++k) {
+    for (int j = 0; j < p; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        work_integrand(k, j, i) = metric(YH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(YH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(YH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH)
+                                - mdot(YH, k, j, i) * vel_scs(k, j, i);
+      }
+    }
+  }
+  ops.integrate_and_diff_yhat(integrand, rhs);
+
+  ops.scs_zhat_grad(delta, grad_vel_scs);
+  ops.scs_zhat_interp(delta, vel_scs);
+  for (int k = 0; k < p; ++k) {
+    for (int j = 0; j < n1D; ++j) {
+      for (int i = 0; i < n1D; ++i) {
+        work_integrand(k, j, i) = metric(ZH, k, j, i, XH) * grad_vel_scs(k, j, i, XH)
+                                + metric(ZH, k, j, i, YH) * grad_vel_scs(k, j, i, YH)
+                                + metric(ZH, k, j, i, ZH) * grad_vel_scs(k, j, i, ZH)
+                                - mdot(ZH, k, j, i) * vel_scs(k, j, i);
       }
     }
   }

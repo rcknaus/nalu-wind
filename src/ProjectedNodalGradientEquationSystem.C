@@ -28,12 +28,23 @@
 #include <kernel/KernelBuilder.h>
 #include <kernel/ProjectedNodalGradientHOElemKernel.h>
 
+#include "ProjectedNodalGradientInteriorOperator.h"
+#include "TpetraLinearSystem.h"
+#include "MatrixFreeOperator.h"
+#include "TpetraMatrixFreeSolver.h"
+#include "MatrixFreeTypes.h"
+#include "NoBoundaryOperator.h"
+#include "ProjectedNodalGradientInteriorOperator.h"
+#include "MassDiagonal.h"
+#include "PNGSolver.h"
+
 // user functions
 #include <user_functions/SteadyThermalContactAuxFunction.h>
 
 // stk_mesh/base/fem
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Field.hpp>
+#include <stk_mesh/base/FieldBLAS.hpp>
 #include <stk_mesh/base/FieldParallel.hpp>
 #include <stk_mesh/base/GetBuckets.hpp>
 #include <stk_mesh/base/GetEntities.hpp>
@@ -55,6 +66,9 @@
 
 namespace sierra{
 namespace nalu{
+
+constexpr bool doMF = true;
+
 
 //==========================================================================
 // Class Definition
@@ -82,10 +96,10 @@ ProjectedNodalGradientEquationSystem::ProjectedNodalGradientEquationSystem(
     dqdx_(NULL),
     qTmp_(NULL)
 {
-  // extract solver name and solver object
+  // extract solver name and solver objectz
   std::string solverName = realm_.equationSystems_.get_solver_block_name(dofName);
   LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, eqType_);
-  linsys_ = LinearSystem::create(realm_, realm_.spatialDimension_, this, solver);
+  linsys_ = LinearSystem::create(realm_, (doMF) ? 1 : realm_.spatialDimension_, this, solver);
 
   // push back EQ to manager
   realm_.push_equation_to_systems(this);
@@ -150,6 +164,8 @@ void
 ProjectedNodalGradientEquationSystem::register_interior_algorithm(
   stk::mesh::Part *part)
 {
+  if (doMF) return;
+
   // types of algorithms
   const AlgorithmType algType = INTERIOR;
 
@@ -185,7 +201,7 @@ ProjectedNodalGradientEquationSystem::register_wall_bc(
   const stk::topology &/*theTopo*/,
   const WallBoundaryConditionData &/*wallBCData*/)
 {
-
+  if (doMF) { return; }
   const AlgorithmType algType = WALL;
 
   // extract the field name for this bc type
@@ -331,6 +347,12 @@ ProjectedNodalGradientEquationSystem::register_overset_bc()
 void
 ProjectedNodalGradientEquationSystem::initialize()
 {
+  if (doMF) {
+    auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(linsys_);
+    tpetralinsys.buildSparsifiedReducedElemToNodeGraph(stk::mesh::selectUnion(realm_.interiorPartVec_));
+    linsys_->finalizeLinearSystem();
+    return;
+  }
   solverAlgDriver_->initialize_connectivity();
   linsys_->finalizeLinearSystem();
 }
@@ -376,26 +398,34 @@ ProjectedNodalGradientEquationSystem::solve_and_update()
     solve_and_update_external();
 }
 
-//--------------------------------------------------------------------------
-//-------- solve_and_update_external ---------------------------------------
-//--------------------------------------------------------------------------
 void
 ProjectedNodalGradientEquationSystem::solve_and_update_external()
 {
-  for ( int k = 0; k < maxIterations_; ++k ) {
+  double timeA, timeB;
+  if (isInit_ && doMF) {
+    pngSolv_ = std::make_shared<PNGSolver<MF::p>>(*this);
+    pngSolv_->create();
+    isInit_ = false;
+  }
 
+  for ( int k = 0; k < maxIterations_; ++k ) {
     // projected nodal gradient, load_complete and solve
-    assemble_and_solve(qTmp_);
+    if(!doMF) {
+      assemble_and_solve(qTmp_);
+    }
+    else {
+      pngSolv_->assemble_and_solve();
+    }
 
     // update
-    double timeA = NaluEnv::self().nalu_time();
+    timeA = NaluEnv::self().nalu_time();
     field_axpby(
       realm_.meta_data(),
       realm_.bulk_data(),
       1.0, *qTmp_,
       1.0, *dqdx_,
       realm_.get_activate_aura());
-    double timeB = NaluEnv::self().nalu_time();
+    timeB = NaluEnv::self().nalu_time();
     timerAssemble_ += (timeB-timeA);
   }
 }

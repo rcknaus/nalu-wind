@@ -7,6 +7,9 @@
 #ifndef DirectionMacros_h
 #define DirectionMacros_h
 
+#define LL 0
+#define RR 1
+
 #define XH 0
 #define YH 1
 #define ZH 2

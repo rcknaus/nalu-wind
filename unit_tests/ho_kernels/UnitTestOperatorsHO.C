@@ -14,6 +14,7 @@
 #include <element_promotion/ElementDescription.h>
 #include <CVFEMTypeDefs.h>
 #include <master_element/TensorProductCVFEMOperators.h>
+#include "master_element/Hex8GeometryFunctions.h"
 
 #include "UnitTestViewUtils.h"
 #include "UnitTestUtils.h"
@@ -282,38 +283,86 @@ template <int p> void scs_grad_hex()
 //--------------------------------------------------------------------------
 template <int p> void nodal_grad_hex()
 {
-  auto ops = sierra::nalu::CVFEMOperators<p, double>();
-  auto elem = sierra::nalu::ElementDescription::create(3, p);
+  using namespace sierra::nalu;
+  auto ops = CVFEMOperators<p, double>();
+  auto elem = ElementDescription::create(3, p);
 
-  sierra::nalu::nodal_scalar_workview<p, double> l_nodalValues(0);
+  nodal_scalar_workview<p, double> l_nodalValues(0);
   auto& nodalValues = l_nodalValues.view();
 
-  const auto nodeLocs1D = sierra::nalu::gauss_lobatto_legendre_rule(p).first;
+  const auto nodeLocs1D = gauss_lobatto_legendre_rule(p).first;
+  auto coords = nodal_vector_array<double, p>();
+
+  double Q[3][3] = {
+      {1,0,0},
+      {0,2,0},
+      {0,0,3}
+  };
 
   TensorPoly poly(p);
   for (int k = 0; k < p + 1; ++k) {
-    double locz =elem->nodeLocs1D[k];
     for (int j = 0; j < p + 1; ++j) {
-      double locy = elem->nodeLocs1D[j];
       for (int i = 0; i < p + 1; ++i) {
-        double locx = elem->nodeLocs1D[i];
-        nodalValues(k,j,i) = poly(locx,locy,locz);
+        const double locx = Q[0][0]*elem->nodeLocs1D[i] + Q[0][1] * elem->nodeLocs1D[j] + Q[0][2]* elem->nodeLocs1D[k];
+        const double locy = Q[1][0]*elem->nodeLocs1D[i] + Q[1][1] * elem->nodeLocs1D[j] + Q[1][2]* elem->nodeLocs1D[k];
+        const double locz = Q[2][0]*elem->nodeLocs1D[i] + Q[2][1] * elem->nodeLocs1D[j] + Q[2][2]* elem->nodeLocs1D[k];
+        nodalValues(k, j, i) = poly(locx,locy,locz);
+        coords(k, j, i, XH) = locx;
+        coords(k, j, i, YH) = locy;
+        coords(k, j, i, ZH) = locz;
       }
     }
   }
 
-  sierra::nalu::nodal_vector_workview<p, double> l_op_nodal_grad(0);
+  nodal_vector_workview<p, double> l_op_nodal_grad(0);
   auto& op_nodal_grad =  l_op_nodal_grad.view();
   ops.nodal_grad(nodalValues, op_nodal_grad);
+
+  const auto& nodalInterp = ops.mat_.linearNodalInterp;
+  NALU_ALIGNED double base_box[3][8];
+  auto xc = la::make_view(coords);
+  hex_vertex_coordinates<p, double>(xc, base_box);
+
+  auto work_grad = nodal_vector_array<double, p>();
+  auto phys_grad = la::make_view(work_grad);
+
   for (int k = 0; k < p + 1; ++k) {
-    double locz = elem->nodeLocs1D[k];
+    NALU_ALIGNED const double interpk[2] = { nodalInterp(0, k), nodalInterp(1, k) };
     for (int j = 0; j < p + 1; ++j) {
-      double locy = elem->nodeLocs1D[j];
+      NALU_ALIGNED const double interpj[2] = { nodalInterp(0, j), nodalInterp(1, j) };
       for (int i = 0; i < p + 1; ++i) {
-        double locx = elem->nodeLocs1D[i];
-        ASSERT_NEAR( op_nodal_grad(k,j,i,0), poly.grad_x(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
-        ASSERT_NEAR( op_nodal_grad(k,j,i,1), poly.grad_y(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
-        ASSERT_NEAR( op_nodal_grad(k,j,i,2), poly.grad_z(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
+        NALU_ALIGNED const double interpi[2] = { nodalInterp(0, i), nodalInterp(1, i) };
+
+        NALU_ALIGNED double jact[3][3];
+        hex_jacobian_t(base_box, interpi, interpj, interpk, jact);
+
+        NALU_ALIGNED double invJac[3][3];
+        invert_matrix33(jact, invJac);
+
+          phys_grad(k, j, i, XH) = invJac[XH][XH] * op_nodal_grad(k, j, i, XH)
+                        + invJac[XH][YH] * op_nodal_grad(k, j, i,YH) + invJac[XH][ZH] * op_nodal_grad(k, j, i, ZH);
+
+          phys_grad(k, j, i, YH) = invJac[YH][XH] * op_nodal_grad(k, j, i, XH)
+                        + invJac[YH][YH] * op_nodal_grad(k, j, i, YH) + invJac[YH][ZH] * op_nodal_grad(k, j, i, ZH);
+
+          phys_grad(k, j, i, ZH) = invJac[ZH][XH] * op_nodal_grad(k, j, i, XH)
+                        + invJac[ZH][YH] * op_nodal_grad(k, j, i, YH) + invJac[ZH][ZH] * op_nodal_grad(k, j, i, ZH);
+
+      }
+    }
+  }
+
+
+  for (int k = 0; k < p + 1; ++k) {
+    for (int j = 0; j < p + 1; ++j) {
+      for (int i = 0; i < p + 1; ++i) {
+        const double locx = Q[0][0]*elem->nodeLocs1D[i] + Q[0][1] * elem->nodeLocs1D[j] + Q[0][2]* elem->nodeLocs1D[k];
+        const double locy = Q[1][0]*elem->nodeLocs1D[i] + Q[1][1] * elem->nodeLocs1D[j] + Q[1][2]* elem->nodeLocs1D[k];
+        const double locz = Q[2][0]*elem->nodeLocs1D[i] + Q[2][1] * elem->nodeLocs1D[j] + Q[2][2]* elem->nodeLocs1D[k];
+
+        ASSERT_NEAR( phys_grad(k,j,i,0), poly.grad_x(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
+        ASSERT_NEAR( phys_grad(k,j,i,1), poly.grad_y(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
+        ASSERT_NEAR( phys_grad(k,j,i,2), poly.grad_z(locx,locy,locz), my_tol) << "(k,j,i) = (" << k << ", " << j << ", " << i << ")";
       }
     }
   }

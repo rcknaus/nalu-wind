@@ -16,14 +16,14 @@ namespace sierra {
 namespace nalu {
 namespace tensor_assembly {
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void diffusion_xhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_view<p, Scalar>& lhs,
   bool reduced_sens)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
@@ -117,14 +117,14 @@ void diffusion_xhat_contrib(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void diffusion_yhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_view<p, Scalar>& lhs,
   bool reduced_sens)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
@@ -216,14 +216,14 @@ void diffusion_yhat_contrib(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void diffusion_zhat_contrib(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_view<p, Scalar>& lhs,
   bool reduced_sens)
 {
-  constexpr int n1D = poly_order + 1;
+  constexpr int n1D = p + 1;
   const auto& mat = ops.mat_;
   const auto& nodalWeights = (reduced_sens) ? mat.lumpedNodalWeights : mat.nodalWeights;
 
@@ -315,11 +315,11 @@ void diffusion_zhat_contrib(
   }
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void scalar_diffusion_lhs(
-  const CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  matrix_view<poly_order, Scalar>& lhs,
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  matrix_view<p, Scalar>& lhs,
   bool reduced_sens = false)
 {
   diffusion_xhat_contrib(ops, metric, lhs, reduced_sens);
@@ -327,29 +327,28 @@ void scalar_diffusion_lhs(
   diffusion_zhat_contrib(ops, metric, lhs, reduced_sens);
 }
 
-template <int poly_order, typename Scalar>
+template <int p, typename Scalar>
 void scalar_diffusion_rhs(
-  CVFEMOperators<poly_order, Scalar>& ops,
-  const scs_vector_view<poly_order, Scalar>& metric,
-  const nodal_scalar_view<poly_order, Scalar>& scalar,
-  nodal_scalar_view<poly_order, Scalar>& rhs)
+  const CVFEMOperators<p, Scalar>& ops,
+  const scs_vector_view<p, Scalar>& metric,
+  const nodal_scalar_view<p, Scalar>& scalar,
+  nodal_scalar_view<p, Scalar>& rhs)
 {
-  constexpr int n1D = poly_order + 1;
-  constexpr int nscs = poly_order;
+  static constexpr int n1D = p + 1;
 
-  nodal_vector_workview<poly_order, Scalar> l_grad_phi;
-  auto& grad_phi_scs = l_grad_phi.view();
+  nodal_vector_array<Scalar, p> work_grad_phi;
+  auto grad_phi_scs = la::make_view(work_grad_phi);
 
-  nodal_scalar_workview<poly_order, Scalar> work_integrand;
-  auto& integrand = work_integrand.view();
+  nodal_scalar_array<Scalar, p> work_integrand;
+  auto integrand = la::make_view(work_integrand);
 
   ops.scs_xhat_grad(scalar, grad_phi_scs);
   for (int k = 0; k < n1D; ++k) {
     for (int j = 0; j < n1D; ++j) {
-      for (int i = 0; i < nscs; ++i) {
+      for (int i = 0; i < p; ++i) {
         integrand(k,j,i) = metric(XH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                           + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                           + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                         + metric(XH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                         + metric(XH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }
@@ -357,23 +356,23 @@ void scalar_diffusion_rhs(
 
   ops.scs_yhat_grad(scalar, grad_phi_scs);
   for (int k = 0; k < n1D; ++k) {
-    for (int j = 0; j < nscs; ++j) {
+    for (int j = 0; j < p; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i) = metric(YH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                           + metric(YH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                           + metric(YH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }
   ops.integrate_and_diff_yhat(integrand, rhs);
 
   ops.scs_zhat_grad(scalar, grad_phi_scs);
-  for (int k = 0; k < nscs; ++k) {
+  for (int k = 0; k < p; ++k) {
     for (int j = 0; j < n1D; ++j) {
       for (int i = 0; i < n1D; ++i) {
         integrand(k, j, i) = metric(ZH, k, j, i, XH) * grad_phi_scs(k, j, i, XH)
-                             + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
-                             + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
+                           + metric(ZH, k, j, i, YH) * grad_phi_scs(k, j, i, YH)
+                           + metric(ZH, k, j, i, ZH) * grad_phi_scs(k, j, i, ZH);
       }
     }
   }

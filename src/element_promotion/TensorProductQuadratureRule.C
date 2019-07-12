@@ -24,6 +24,7 @@ int integration_points_required(int poly, QuadratureRuleType quadType)
   {
     case QuadratureRuleType::MINIMUM_GAUSS: return gauss_points_required_for_order(poly);
     case QuadratureRuleType::DOUBLE_GAUSS: return gauss_points_required_for_order(2*poly);
+    case QuadratureRuleType::ONE_POINT_PER_SCV: return 1;
   }
   ThrowAssert(false);
   return -1;

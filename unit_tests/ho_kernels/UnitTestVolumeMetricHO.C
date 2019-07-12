@@ -14,9 +14,20 @@
 #include "UnitTestUtils.h"
 
 
-
 namespace sierra {
 namespace nalu {
+
+
+
+template <int p> struct StaticCoeffs {};
+
+template <> struct StaticCoeffs<1>
+{
+  static constexpr LocalArray<double[2]> scsDeriv = {{-0.5,0.5}};
+  static constexpr LocalArray<double[2][2]> nodalDeriv = {{{-0.5,0.5}, {-0.5,0.5}}};
+};
+
+template struct StaticCoeffs<1>;
 
 template <int p> void check_scv_volumes()
 {
@@ -54,40 +65,68 @@ template <int p> void check_scv_volumes()
       }
     }
   }
-
   auto ops = CVFEMOperators<p, double>();
-  nodal_scalar_workview<p, double> l_detj(0);
-  nodal_scalar_workview<p, double> l_computedScvVolume(0);
-
 #ifdef NDEBUG
   int nRuns = 100000 / (p+1);
 #else
   int nRuns = 1;
 #endif
 
+  auto l_detj = la::zero<nodal_scalar_array<double, p>>();
+  auto detj = la::make_view(l_detj);
+
   using clock_type = std::chrono::steady_clock;
   auto start_clock = clock_type::now();
   for (int j = 0; j < nRuns; ++j) {
-    Kokkos::deep_copy(l_detj.view(),0);
-    high_order_metrics::compute_volume_metric_linear(ops, coords, l_detj.view());
+    la::zero(l_detj);
+    high_order_metrics::compute_volume_metric_linear(ops, coords, detj);
   }
   auto end_metric = clock_type::now();
+
+  auto l_computedScvVolume = la::zero<nodal_scalar_array<double, p>>();
+  auto computedScvVolume = la::make_view(l_computedScvVolume);
+
   for (int j = 0; j < nRuns; ++j) {
-    Kokkos::deep_copy(l_computedScvVolume.view(),0);
-    ops.volume(l_detj.view(), l_computedScvVolume.view());
+    la::zero(l_computedScvVolume);
+    ops.volume(detj, computedScvVolume);
   }
   auto end_volume = clock_type::now();
-  EXPECT_VIEW_NEAR_3D(exactScvVolume, l_computedScvVolume.view(), 1.0e-10);
+  EXPECT_VIEW_NEAR_3D(exactScvVolume, computedScvVolume, 1.0e-10);
 
   std::cout << "Over " << nRuns << " runs, avg time for volume metric: " << std::chrono::duration_cast<std::chrono::duration<double>>(end_metric - start_clock).count()/(double)nRuns
-     << "s | avg time for volume integration: " <<  std::chrono::duration_cast<std::chrono::duration<double>>(end_volume - end_metric).count()/(double)nRuns <<  "s" << std::endl;
+     << "s | avg time for volume integration: " << std::chrono::duration_cast<std::chrono::duration<double>>(end_volume - end_metric).count()/(double)nRuns <<  "s" << std::endl;
+
+
+//  using CoeffType = StaticCoefficientMatrices<1>;
+
+//  unit_test_utils::dump_2d_view(ops.mat_.scsDeriv);
+//  unit_test_utils::dump_2d_view(ops.mat_.scsInterp);
+//  unit_test_utils::dump_2d_view(ops.mat_.nodalWeights);
+//  unit_test_utils::dump_2d_view(ops.mat_.lumpedNodalWeights);
+//  unit_test_utils::dump_2d_view(ops.mat_.nodalDeriv);
+  unit_test_utils::dump_2d_view(ops.mat_.linearNodalInterp);
+//  unit_test_utils::dump_2d_view(ops.mat_.linearScsInterp);
+
+  enum values {
+    v1 = 1 << 0,
+    v2 = 1 << 1,
+    v3 = 1 << 2,
+    v4 = 1 << 3
+  };
+
+  std:: cout << v1 << ", " << v2 << ", " << v3 << ", " << v4 << std::endl;
 
 }
 
-TEST_POLY(VolumeHO, check_scv_volumes, 4)
+
+
+
+
+TEST_POLY(VolumeHO, check_scv_volumes, 2)
 
 }
 }
+
 
 
 

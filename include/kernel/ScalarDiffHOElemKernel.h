@@ -31,6 +31,9 @@ class ScalarDiffHOElemKernel final : public Kernel
 {
   DeclareCVFEMTypeDefs(CVFEMViews<AlgTraits::polyOrder_>);
 public:
+  static constexpr int poly_order = AlgTraits::polyOrder_;
+  static constexpr int ndof = 1;
+
   ScalarDiffHOElemKernel(
     const stk::mesh::BulkData& bulkData,
     SolutionOptions& solnOpts,
@@ -38,17 +41,16 @@ public:
     ScalarFieldType *diffFluxCoeff,
     ElemDataRequests& dataPreReqs);
 
-  ~ScalarDiffHOElemKernel()
-  {
-    std::cout << "\n---- time_diff: " << timer_diff << ", time_jac: "
-        << timer_jac << ", timer_resid: " << timer_resid << "\n----" << std::endl;
-  }
+  ~ScalarDiffHOElemKernel() = default;
+
+  ScalarFieldType& solution_field() { return *scalarQ_; }
 
   using Kernel::execute;
   void execute(
     SharedMemView<DoubleType**>&,
     SharedMemView<DoubleType*>&,
     ScratchViewsHO<DoubleType>&) final;
+
 
 private:
   ScalarFieldType *scalarQ_{nullptr};
@@ -60,9 +62,7 @@ private:
   double timer_diff{0};
   double timer_jac{0};
   double timer_resid{0};
-
 };
-
 
 
 } // namespace nalu

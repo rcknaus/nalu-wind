@@ -15,6 +15,10 @@
  *  algorithms.
  */
 
+#if defined(__INTEL_COMPILER)
+#include <aligned_new>
+#endif
+
 #include "stk_simd/Simd.hpp"
 #include "Kokkos_Macros.hpp"
 

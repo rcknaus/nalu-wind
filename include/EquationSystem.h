@@ -76,6 +76,8 @@ public:
     stk::mesh::Part * /* part */,
     const stk::topology & /* theTopo */) {}
 
+  void output_banner(int,double,double,double);
+
   // since Equation systems hold other equations systems
   // defaults are provided for all methods below
 
