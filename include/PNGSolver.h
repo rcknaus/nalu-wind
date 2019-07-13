@@ -41,7 +41,7 @@ public:
 
   static constexpr bool precondition = true;
 
-  PNGSolver(ProjectedNodalGradientEquationSystem& eqSys) : eqSys_(eqSys) {}
+  PNGSolver(EquationSystem& eqSys) : eqSys_(eqSys) {}
 
   void create()
   {
@@ -125,7 +125,7 @@ public:
     banner();
   }
 
-  void update_solution()
+  void update_solution(VectorFieldType& qTmp)
   {
     auto& realm = eqSys_.realm_;
     auto& tpetralinsys = *dynamic_cast<TpetraLinearSystem*>(eqSys_.linsys_);
@@ -133,13 +133,13 @@ public:
     auto& bulk = realm.bulk_data();
     auto entToLid = tpetralinsys.entityToLID_;
 
-    write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), *eqSys_.qTmp_);
+    write_solution_to_field(bulk, selector, entToLid, mfProb_->sln->getLocalView<HostSpace>(), qTmp);
     if (realm.hasPeriodic_) {
-      realm.periodic_delta_solution_update(eqSys_.qTmp_, 3);
+      realm.periodic_delta_solution_update(&qTmp, 3);
     }
   }
 
-  void assemble_and_solve()
+  void assemble_and_solve(VectorFieldType& qTmp)
   {
     double timeA = NaluEnv::self().nalu_time();
     assemble();
@@ -152,12 +152,12 @@ public:
     eqSys_.timerSolve_ += (timeB - timeA);
 
     timeA = NaluEnv::self().nalu_time();
-    update_solution();
+    update_solution(qTmp);
     timeB = NaluEnv::self().nalu_time();
     eqSys_.timerAssemble_ += (timeB - timeA);
   }
 
-  ProjectedNodalGradientEquationSystem& eqSys_;
+  EquationSystem& eqSys_;
   Teuchos::RCP<ProjectedNodalGradientInteriorOperator<MF::p>> mfInterior_;
   Teuchos::RCP<PNGBoundaryOperator<p>> mfBdry_;
   Teuchos::RCP<MassInteriorDiagonal<MF::p>> mfMass_;

@@ -414,7 +414,7 @@ ProjectedNodalGradientEquationSystem::solve_and_update_external()
       assemble_and_solve(qTmp_);
     }
     else {
-      pngSolv_->assemble_and_solve();
+      pngSolv_->assemble_and_solve(*qTmp_);
     }
 
     // update

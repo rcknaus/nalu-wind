@@ -756,6 +756,54 @@ LowMachEquationSystem::solve_and_update()
     isInit_ = false;
   }
 
+  constexpr bool average_both = false;
+  constexpr bool average_mu = false;
+
+  if (MF::doMatrixFree && average_both) {
+    nodal_average_field(
+      realm_.polyOrder_,
+      realm_.bulk_data(),
+      stk::mesh::selectUnion(realm_.interiorPartVec_),
+      momentumEqSys_->coordinates_->field_of_state(stk::mesh::StateNP1),
+      momentumEqSys_->evisc_->field_of_state(stk::mesh::StateNone)
+    );
+
+    if (realm_.hasPeriodic_) {
+      realm_.periodic_field_update(&momentumEqSys_->evisc_->field_of_state(stk::mesh::StateNone), 1);
+    }
+  }
+
+  if (MF::doMatrixFree && average_mu) {
+    constexpr int p = MF::p;
+    const auto& bulk = realm_.bulk_data();
+    const auto& meta = realm_.meta_data();
+    const auto selector = stk::mesh::selectUnion(realm_.interiorPartVec_);
+    const auto& viscField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "viscosity");
+    auto lamvisc = gather_field<p>(bulk, selector, viscField.field_of_state(stk::mesh::StateNone));
+
+    const auto& rhoField = *meta.get_field<ScalarFieldType>(stk::topology::NODE_RANK, "density");
+    auto rhop1 = gather_field<p>(bulk, selector, rhoField.field_of_state(stk::mesh::StateNP1));
+
+    const auto& dnvField = *bulk.mesh_meta_data().get_field<ScalarFieldType>(stk::topology::NODE_RANK, "dual_nodal_volume");
+    auto dnv = gather_field<p>(bulk, selector, dnvField);
+    auto coords = gather_field<p>(bulk, selector, momentumEqSys_->coordinates_->field_of_state(stk::mesh::StateNP1));
+    auto velp1 = gather_field<p>(bulk, selector,  momentumEqSys_->velocity_->field_of_state(stk::mesh::StateNP1));
+
+    auto effvisc = nodal_wale_viscosity<p>(0.325, coords, rhop1, lamvisc, dnv, velp1);
+
+    stk::mesh::field_fill(0.0,  momentumEqSys_->evisc_->field_of_state(stk::mesh::StateNone));
+    auto entities = element_entity_view<p>(bulk, selector);
+    auto vol = volumes<p>(coords);
+    nodal_average<p>(entities, vol, dnv, effvisc, momentumEqSys_->evisc_->field_of_state(stk::mesh::StateNone));
+    stk::mesh::parallel_sum(bulk, {momentumEqSys_->evisc_});
+
+    if (realm_.hasPeriodic_) {
+      realm_.periodic_field_update(&momentumEqSys_->evisc_->field_of_state(stk::mesh::StateNone), 1);
+    }
+  }
+
+
+
   momentumEqSys_->tviscAlgDriver_->execute();
   momentumEqSys_->diffFluxCoeffAlgDriver_->execute();
 
