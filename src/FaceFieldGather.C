@@ -29,14 +29,6 @@ int count_entities(const stk::mesh::BucketVector& buckets) {
   return num_scalar_items;
 }
 
-int num_simd_elements(const stk::mesh::BucketVector& buckets) {
-  const int num_scalar_items = count_entities(buckets);
-  const int remainder = num_scalar_items % simdLen;
-  const auto add_element_for_remainder = (remainder > 0) ? 1 : 0;
-  const int num_simd_elements = num_scalar_items / simdLen + add_element_for_remainder;
-  return num_simd_elements;
-}
-
 int bucket_index(int bktIndex, int simdElemIndex) { return bktIndex * simdLen + simdElemIndex; }
 
 template <typename Func> void iterate_buckets(const stk::mesh::BucketVector& buckets, Func f) {
@@ -57,6 +49,20 @@ template <typename Func> void iterate_buckets(const stk::mesh::BucketVector& buc
     });
   });
 }
+
+int num_simd_elements(const stk::mesh::BucketVector& buckets) {
+  int mesh_index = 0;
+  auto policy = Kokkos::TeamPolicy<HostSpace>(buckets.size(), Kokkos::AUTO);
+  Kokkos::parallel_for(policy, [&mesh_index, buckets](const sierra::nalu::TeamHandleType& team)
+  {
+    const stk::mesh::Bucket& b = *buckets[team.league_rank()];
+    const int bucketLen = b.size();
+    const int simdBucketLen = get_num_simd_groups(bucketLen);
+    Kokkos::atomic_add(&mesh_index, simdBucketLen);
+  });
+  return mesh_index;
+}
+
 }
 
 template <int p> face_ordinal_view_t<p> face_entity_offset_to_gid_map(
