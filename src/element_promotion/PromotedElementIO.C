@@ -77,6 +77,7 @@ PromotedElementIO::PromotedElementIO(
     coordinates_(coordField),
     nDim_(metaData.spatial_dimension())
 {
+  ThrowRequire(nDim_ == 3u);
   Ioss::Init::Initializer init_db;
 
   Ioss::PropertyManager properties;
@@ -336,7 +337,7 @@ PromotedElementIO::write_element_connectivity(
       const auto length = b.size();
       for (size_t k = 0; k < length; ++k) {
         const auto* node_rels = b.begin_nodes(k);
-        const auto numberSubElements = elem_.nodesInBaseElement;
+        const auto numberSubElements = elem_.polyOrder * elem_.polyOrder * elem_.polyOrder;
 
         for (int subElementIndex = 0; subElementIndex < numberSubElements; ++subElementIndex) {
           globalSubElementIds.at(subElementCounter) = entityIds[subElementCounter];

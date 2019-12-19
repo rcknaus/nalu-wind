@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <array>
 
 namespace sierra {
 namespace nalu {
