@@ -2397,6 +2397,7 @@ void
 MomentumEquationSystem::initialize()
 {
   solverAlgDriver_->initialize_connectivity();
+  linsys_->buildFaceElemToNodeGraph(realm_.bcPartVec_);
   linsys_->finalizeLinearSystem();
 
   // Set flag to extract diagonal if the user activates it in input file
@@ -3669,6 +3670,7 @@ ContinuityEquationSystem::initialize()
   }
 
   solverAlgDriver_->initialize_connectivity();
+  linsys_->buildFaceElemToNodeGraph(realm_.bcPartVec_);
   linsys_->finalizeLinearSystem();
 }
 
