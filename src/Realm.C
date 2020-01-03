@@ -262,7 +262,7 @@ namespace nalu{
     balanceNodeOptions_(),
     wallTimeStart_(stk::wall_time()),
     doPromotion_(false),
-    promotionOrder_(0u),
+    promotionOrder_(1u),
     inputMeshIdx_(std::numeric_limits<size_t>::max()),
     node_(node)
 {
@@ -712,9 +712,17 @@ Realm::load(const YAML::Node & node)
   get_if_present(node, "use_edges", realmUsesEdges_, realmUsesEdges_);
 
   get_if_present(node, "polynomial_order", promotionOrder_, promotionOrder_);
-  if (promotionOrder_ >=1) {
-    throw std::runtime_error("Mesh promotion not available");
+  if (promotionOrder_ > 2) {
     doPromotion_ = true;
+  }
+
+  if (promotionOrder_ > 5) {
+    throw std::runtime_error("Only polynomial orders 1-4 supported");
+  }
+
+  get_if_present(node, "matrix_free", matrixFree_, matrixFree_);
+  if (polynomial_order() > 1 && !matrixFree_) {
+    throw std::runtime_error("Polynomial orders > 1 must be matrix free");
   }
 
   // let everyone know about core algorithm
@@ -2808,6 +2816,10 @@ void
 Realm::register_interior_algorithm(
   stk::mesh::Part *part)
 {
+  if (matrixFree_) {
+    return;
+  }
+
   const AlgorithmType algType = INTERIOR;
   geometryAlgDriver_->register_elem_algorithm<GeometryInteriorAlg>(
       algType, part, "geometry");
@@ -2824,6 +2836,9 @@ Realm::register_wall_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2855,6 +2870,9 @@ Realm::register_inflow_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2886,6 +2904,9 @@ Realm::register_open_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2918,7 +2939,9 @@ Realm::register_symmetry_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
-
+  if (matrixFree_) {
+    return;
+  }
   //====================================================
   // Register face (boundary condition) data
   //====================================================
@@ -3014,6 +3037,7 @@ Realm::register_non_conformal_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  ThrowRequire(!matrixFree_);
 
   // push back the part for book keeping and, later, skin mesh
   bcPartVec_.push_back(part);
@@ -3197,6 +3221,15 @@ Realm::provide_output()
         ioBroker_->process_output_request(resultsFileIndex_, currentTime);
       }
       else {
+        for (auto& stringFieldPair : promotionIO_->get_output_fields()) {
+          auto& field = *stringFieldPair.second;
+          if (field.type_is<double>()) {
+            ngp_field_manager().get_field<double>(field.mesh_meta_data_ordinal()).sync_to_host();
+          }
+          else if (field.type_is<int>()) {
+            ngp_field_manager().get_field<int>(field.mesh_meta_data_ordinal()).sync_to_host();
+          }
+        }
         promotionIO_->write_database_data(currentTime);
       }
       equationSystems_.provide_output();
@@ -4840,6 +4873,24 @@ Realm::handle_all_element_part_alias(const std::vector<std::string>& names) cons
   }
   return names;
 }
+
+//--------------------------------------------------------------------------
+//-------- polynomial_order() ----------------------------------------------
+//--------------------------------------------------------------------------
+int Realm::polynomial_order() const
+{
+  return promotionOrder_;
+}
+
+//--------------------------------------------------------------------------
+//-------- matrix_free() ---------------------------------------------------
+//--------------------------------------------------------------------------
+bool Realm::matrix_free() const
+{
+  return matrixFree_;
+}
+
+
 
 
 } // namespace nalu

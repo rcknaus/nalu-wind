@@ -9,6 +9,8 @@
 
 
 
+#include "FieldTypeDef.h"
+#include "matrix_free/EquationUpdate.h"
 #include <HeatCondEquationSystem.h>
 
 #include <AssembleElemSolverAlgorithm.h>
@@ -64,7 +66,13 @@
 // bc kernels
 #include <kernel/ScalarFluxPenaltyElemKernel.h>
 
+// matrix free
+#include <matrix_free/ConductionUpdate.h>
+
+#include <ngp_utils/NgpFieldBLAS.h>
+
 // user functions
+#include <stk_mesh/base/Selector.hpp>
 #include <user_functions/SteadyThermalContactAuxFunction.h>
 #include <user_functions/SteadyThermalContactSrcNodeSuppAlg.h>
 #include <user_functions/SteadyThermalContactSrcElemSuppAlg.h>
@@ -131,14 +139,18 @@ HeatCondEquationSystem::HeatCondEquationSystem(
     isInit_(true),
     projectedNodalGradEqs_(NULL)
 {
-  // extract solver name and solver object
-  std::string solverName = realm_.equationSystems_.get_solver_block_name("temperature");
-  LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_TEMPERATURE);
-  linsys_ = LinearSystem::create(realm_, 1, this, solver);
+  matrixFree_ = realm_.matrix_free();
+  if (!matrixFree_) {
+    // extract solver name and solver object
+    std::string solverName = realm_.equationSystems_.get_solver_block_name("temperature");
+    LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_TEMPERATURE);
+    linsys_ = LinearSystem::create(realm_, 1, this, solver);
 
-  // determine nodal gradient form
-  set_nodal_gradient("temperature");
-  NaluEnv::self().naluOutputP0() << "Edge projected nodal gradient for temperature: " << edgeNodalGradient_ <<std::endl;
+
+    // determine nodal gradient form
+    set_nodal_gradient("temperature");
+    NaluEnv::self().naluOutputP0() << "Edge projected nodal gradient for temperature: " << edgeNodalGradient_ <<std::endl;
+  }
 
   // push back EQ to manager
   realm_.push_equation_to_systems(this);
@@ -209,6 +221,10 @@ HeatCondEquationSystem::register_nodal_fields(
 
   specHeat_ = &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "specific_heat"));
   stk::mesh::put_field_on_mesh(*specHeat_, *part, nullptr);
+
+  volumetricHeatCapacity_ =
+      &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "volumetric_heat_capacity"));
+  stk::mesh::put_field_on_mesh(*volumetricHeatCapacity_, *part, nullptr);
 
   thermalCond_ = &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "thermal_conductivity"));
   stk::mesh::put_field_on_mesh(*thermalCond_, *part, nullptr);
@@ -298,6 +314,14 @@ void
 HeatCondEquationSystem::register_interior_algorithm(
   stk::mesh::Part *part)
 {
+  if (matrixFree_) {
+    ThrowRequireMsg(part->topology() == stk::topology::HEX_8
+                || part->topology() == stk::topology::HEX_27
+                || part->topology().is_superelement(),
+      "Only pure hex8/hex27 meshes supported, found" + part->topology().name() + "for part " + part->name());
+    interiorParts_.push_back(part);
+    return;
+  }
 
   // types of algorithms
   const AlgorithmType algType = INTERIOR;
@@ -513,7 +537,6 @@ HeatCondEquationSystem::register_wall_bc(
   UserDataType theDataType = get_bc_data_type(userData, temperatureName);
 
   if ( userData.tempSpec_ ||  FUNCTION_UD == theDataType ) {
- 
     // register boundary data; temperature_bc
     ScalarFieldType *theBcField = &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "temperature_bc"));
     stk::mesh::put_field_on_mesh(*theBcField, *part, nullptr);
@@ -557,6 +580,11 @@ HeatCondEquationSystem::register_wall_bc(
                                stk::topology::NODE_RANK);
     bcDataMapAlg_.push_back(theCopyAlg);
 
+
+    if (matrixFree_) {
+     dirichletParts_.push_back(part);
+     return;
+    }
     // wall specified temperature solver algorithm
     if ( realm_.solutionOptions_->useConsolidatedBcSolverAlg_ ) {
       // solver for weak wall
@@ -595,7 +623,6 @@ HeatCondEquationSystem::register_wall_bc(
     }
   }
   else if( userData.heatFluxSpec_ && !userData.robinParameterSpec_ ) {
-
     const AlgorithmType algTypeHF = WALL_HF;
 
     ScalarFieldType *theBcField = &(meta_data.declare_field<ScalarFieldType>(stk::topology::NODE_RANK, "heat_flux_bc"));
@@ -614,6 +641,11 @@ HeatCondEquationSystem::register_wall_bc(
                                  theBcField, theAuxFunc,
                                  stk::topology::NODE_RANK);
     bcDataAlg_.push_back(auxAlg);
+
+    if (matrixFree_) {
+      fluxParts_.push_back(part);
+      return;
+    }
 
     // solver; lhs; same for edge and element-based scheme
     std::map<AlgorithmType, SolverAlgorithm *>::iterator itsi =
@@ -904,8 +936,32 @@ HeatCondEquationSystem::register_overset_bc()
 void
 HeatCondEquationSystem::initialize()
 {
-  solverAlgDriver_->initialize_connectivity();
-  linsys_->finalizeLinearSystem();
+  if (matrixFree_) {
+    matrix_free::fill_tpetra_id_field(
+      realm_.ngp_mesh(), 
+      stk::mesh::selectUnion(interiorParts_),
+      *realm_.meta_data().get_field<GlobalIdFieldType>(stk::topology::NODE_RANK, "nalu_global_id"), 
+      *realm_.meta_data().get_field<TpetIDFieldType>(stk::topology::NODE_RANK, "tpet_global_id"),
+      realm_.allPeriodicInteractingParts_
+    );
+
+    auto solverParams = realm_.root()->linearSolvers_
+      ->get_solver_configuration(realm_.equationSystems_.get_solver_block_name("temperature"));
+    matrixFreeUpdate_ = matrix_free::make_equation_update<matrix_free::ConductionUpdate>(
+      realm_.polynomial_order(), 
+      realm_.meta_data(),
+      realm_.ngp_mesh(),
+      realm_.ngp_field_manager(),
+      solverParams,
+      stk::mesh::selectUnion(interiorParts_),
+      stk::mesh::selectUnion(dirichletParts_),
+      stk::mesh::selectUnion(fluxParts_)
+    );
+  }
+  else {
+    solverAlgDriver_->initialize_connectivity();
+    linsys_->finalizeLinearSystem();
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -914,38 +970,105 @@ HeatCondEquationSystem::initialize()
 void
 HeatCondEquationSystem::reinitialize_linear_system()
 {
+  if (matrixFree_) {
+    initialize();
+  }
+  else {
+    // delete linsys
+    delete linsys_;
 
-  // delete linsys
-  delete linsys_;
-
-  // delete old solver
-  const EquationType theEqID = EQ_TEMPERATURE;
-  LinearSolver *theSolver = NULL;
-  std::map<EquationType, LinearSolver *>::const_iterator iter
+    // delete old solver
+    const EquationType theEqID = EQ_TEMPERATURE;
+    LinearSolver *theSolver = NULL;
+    std::map<EquationType, LinearSolver *>::const_iterator iter
     = realm_.root()->linearSolvers_->solvers_.find(theEqID);
-  if (iter != realm_.root()->linearSolvers_->solvers_.end()) {
-    theSolver = (*iter).second;
-    delete theSolver;
+    if (iter != realm_.root()->linearSolvers_->solvers_.end()) {
+      theSolver = (*iter).second;
+      delete theSolver;
+    }
+
+    // create new solver
+    std::string solverName = realm_.equationSystems_.get_solver_block_name("temperature");
+    LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_TEMPERATURE);
+    linsys_ = LinearSystem::create(realm_, 1, this, solver);
+
+    // initialize
+    solverAlgDriver_->initialize_connectivity();
+    linsys_->finalizeLinearSystem();
   }
 
-  // create new solver
-  std::string solverName = realm_.equationSystems_.get_solver_block_name("temperature");
-  LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_TEMPERATURE);
-  linsys_ = LinearSystem::create(realm_, 1, this, solver);
-
-  // initialize
-  solverAlgDriver_->initialize_connectivity();
-  linsys_->finalizeLinearSystem();
 }
 
+//--------------------------------------------------------------------------
+//-------- predict_state ---------------------------------------------------
+//--------------------------------------------------------------------------
 void
 HeatCondEquationSystem::predict_state()
 {
-  // copy state n to state np1
-  ScalarFieldType &tN = temperature_->field_of_state(stk::mesh::StateN);
-  ScalarFieldType &tNp1 = temperature_->field_of_state(stk::mesh::StateNP1);
-  field_copy(realm_.meta_data(), realm_.bulk_data(), tN, tNp1, realm_.get_activate_aura());
+  const auto& ngpMesh = realm_.ngp_mesh();
+  const auto& fieldMgr = realm_.ngp_field_manager();
+  const auto& tN = fieldMgr.get_field<double>(
+    temperature_->field_of_state(stk::mesh::StateN).mesh_meta_data_ordinal());
+  auto& tNp1 = fieldMgr.get_field<double>(
+    temperature_->field_of_state(stk::mesh::StateNP1).mesh_meta_data_ordinal());
+
+  const stk::mesh::Selector sel = stk::mesh::selectField(*temperature_) - realm_.get_inactive_selector();
+  nalu_ngp::field_copy(ngpMesh, sel, tNp1, tN);
+  if (matrixFree_) {
+     matrixFreeUpdate_->swap_states();
+  }
 }
+
+//--------------------------------------------------------------------------
+//-------- get_scaled_gammas -----------------------------------------------
+//--------------------------------------------------------------------------
+Kokkos::Array<double, 3> HeatCondEquationSystem::get_scaled_gammas()
+{
+  return Kokkos::Array<double, 3>{{
+        realm_.get_gamma1()/realm_.get_time_step(),
+        realm_.get_gamma2()/realm_.get_time_step(),
+        realm_.get_gamma3()/realm_.get_time_step(),
+      }};
+}
+
+//--------------------------------------------------------------------------
+//-------- compute_volumetric_heat_capacity --------------------------------
+//--------------------------------------------------------------------------
+void HeatCondEquationSystem::compute_volumetric_heat_capacity()
+{
+  const auto& ngpMesh = realm_.ngp_mesh();
+  const auto& fieldMgr = realm_.ngp_field_manager();
+  const ngp::ConstField<double>& rho = fieldMgr.get_field<double>(density_->mesh_meta_data_ordinal());
+  const ngp::ConstField<double>& cp = fieldMgr.get_field<double>(specHeat_->mesh_meta_data_ordinal());
+  ngp::Field<double>& alpha = fieldMgr.get_field<double>(volumetricHeatCapacity_->mesh_meta_data_ordinal());
+  const stk::mesh::Selector sel = stk::mesh::selectField(*volumetricHeatCapacity_) - realm_.get_inactive_selector();
+
+  nalu_ngp::run_entity_algorithm("volumetric heat capacity", ngpMesh, stk::topology::NODE_RANK, sel,
+    KOKKOS_LAMBDA(typename nalu_ngp::NGPMeshTraits<ngp::Mesh>::MeshIndex& mi) {
+    alpha.get(mi, 0) = rho.get(mi,0) * cp.get(mi, 0);
+  });
+  alpha.modify_on_device();
+}
+
+
+//--------------------------------------------------------------------------
+//-------- provide_norm ----------------------------------------------------
+//--------------------------------------------------------------------------
+double HeatCondEquationSystem::provide_norm()
+{
+  ThrowRequire(linsys_ != nullptr || matrixFree_);
+  return (matrixFree_) ? matrixFreeUpdate_->provide_norm() : linsys_->nonLinearResidual();
+}
+
+//--------------------------------------------------------------------------
+//-------- provide_scaled_norm ---------------------------------------------
+//--------------------------------------------------------------------------
+double HeatCondEquationSystem::provide_scaled_norm()
+{
+  ThrowRequire(linsys_ != nullptr || matrixFree_);
+  return (matrixFree_) ? matrixFreeUpdate_->provide_scaled_norm() : linsys_->scaledNonLinearResidual();
+}
+
 
 //--------------------------------------------------------------------------
 //-------- solve_and_update ------------------------------------------------
@@ -955,8 +1078,22 @@ HeatCondEquationSystem::solve_and_update()
 {
   // initialize fields
   if ( isInit_ ) {
-    compute_projected_nodal_gradient();
+    if (matrixFree_) {
+      compute_volumetric_heat_capacity();
+      matrixFreeUpdate_->initialize();
+    }
+    else {
+      compute_projected_nodal_gradient();
+    }
     isInit_ = false;
+  }
+
+  if (matrixFree_) {
+    const double time_assemble_start = NaluEnv::self().nalu_time();
+    matrixFreeUpdate_->compute_preconditioner(realm_.get_gamma1()/realm_.get_time_step());
+    matrixFreeUpdate_->update_solution_fields();
+    const double time_assemble_end = NaluEnv::self().nalu_time();
+    timerAssemble_ += (time_assemble_end-time_assemble_start);
   }
 
   for ( int k = 0; k < maxIterations_; ++k ) {
@@ -965,22 +1102,38 @@ HeatCondEquationSystem::solve_and_update()
                     << std::setw(15) << std::right << userSuppliedName_ << std::endl;
     
     // heat conduction assemble, load_complete and solve
-    assemble_and_solve(tTmp_);
+    if (matrixFree_) {
+      const double time_solve_start = NaluEnv::self().nalu_time();
+      matrixFreeUpdate_->compute_update(get_scaled_gammas(), 
+         realm_.ngp_field_manager().get_field<double>(tTmp_->mesh_meta_data_ordinal()));
+      const double time_solve_end = NaluEnv::self().nalu_time();
+      timerSolve_ += (time_solve_end-time_solve_start);
 
+      if (realm_.hasPeriodic_) {
+        realm_.periodic_field_update(tTmp_, 1);
+      }
+      matrixFreeUpdate_->banner(name_, NaluEnv::self().naluOutputP0());
+    }
+    else{
+      assemble_and_solve(tTmp_);
+    }
+ 
     // update
     double timeA = NaluEnv::self().nalu_time();
-    field_axpby(
-      realm_.meta_data(),
-      realm_.bulk_data(),
+    solution_update(
       1.0, *tTmp_,
-      1.0, *temperature_, 
-      realm_.get_activate_aura());
+      1.0, temperature_->field_of_state(stk::mesh::StateNP1));
     double timeB = NaluEnv::self().nalu_time();
+    if (matrixFree_) {
+      matrixFreeUpdate_->update_solution_fields();
+    }
     timerAssemble_ += (timeB-timeA);
    
     // projected nodal gradient
     timeA = NaluEnv::self().nalu_time();
-    compute_projected_nodal_gradient();
+    if (!matrixFree_) {
+      compute_projected_nodal_gradient();
+    }
     timeB = NaluEnv::self().nalu_time();
     timerMisc_ += (timeB-timeA);
   }  

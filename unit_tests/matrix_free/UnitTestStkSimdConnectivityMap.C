@@ -1,0 +1,190 @@
+#include "matrix_free/StkSimdConnectivityMap.h"
+#include "matrix_free/NodeOrderMap.h"
+#include "matrix_free/StkToTpetraMap.h"
+
+#include <Kokkos_View.hpp>
+#include <numeric>
+#include <stk_io/IossBridge.hpp>
+#include <stk_mesh/base/Bucket.hpp>
+#include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/FieldTraits.hpp>
+#include <stk_mesh/base/Types.hpp>
+#include <stk_ngp/Ngp.hpp>
+#include <stk_util/util/ReportHandler.hpp>
+#include <string>
+#include <vector>
+#include "stk_mesh/base/BulkData.hpp"
+#include "stk_mesh/base/CoordinateSystems.hpp"
+#include "stk_mesh/base/FEMHelpers.hpp"
+#include "stk_mesh/base/Field.hpp"
+#include "stk_mesh/base/FieldBase.hpp"
+#include "stk_mesh/base/GetEntities.hpp"
+#include "stk_mesh/base/MetaData.hpp"
+#include "stk_mesh/base/Selector.hpp"
+#include "stk_mesh/base/SkinBoundary.hpp"
+#include "stk_mesh/base/Types.hpp"
+#include "stk_ngp/Ngp.hpp"
+#include "stk_topology/topology.hpp"
+
+#include "gtest/gtest.h"
+
+namespace sierra {
+namespace nalu {
+namespace matrix_free {
+
+class SimdConnectivityFixture : public ::testing::Test
+{
+protected:
+  SimdConnectivityFixture()
+    : meta(3u),
+      bulk(meta, MPI_COMM_WORLD),
+      gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
+        stk::topology::NODE_RANK, "global_ids")),
+      tpetra_gid_field(
+        meta.declare_field<
+          stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
+          stk::topology::NODE_RANK, "tpetra_global_ids"))
+  {
+    stk::topology topo(stk::topology::HEX_8);
+
+    stk::mesh::Part& block_1 = meta.declare_part_with_topology("block_1", topo);
+    stk::io::put_io_part_attribute(block_1);
+
+    stk::mesh::PartVector allSurfaces = {
+      &meta.declare_part("all_surfaces", meta.side_rank())};
+    stk::io::put_io_part_attribute(*allSurfaces.front());
+
+    stk::mesh::PartVector individualSurfaces(topo.num_sides());
+    for (unsigned k = 0u; k < topo.num_sides(); ++k) {
+      individualSurfaces[k] = &meta.declare_part_with_topology(
+        "surface_" + std::to_string(k), topo.side_topology(k));
+    }
+
+    // set a coordinate field
+    using vector_field_type = stk::mesh::Field<double, stk::mesh::Cartesian3d>;
+    auto& coordField = meta.declare_field<vector_field_type>(
+      stk::topology::NODE_RANK, "coordinates");
+    stk::mesh::put_field_on_mesh(coordField, block_1, nullptr);
+    stk::mesh::put_field_on_mesh(gid_field, block_1, 1, nullptr);
+    stk::mesh::put_field_on_mesh(tpetra_gid_field, block_1, 1, nullptr);
+    stk::mesh::put_field_on_mesh(
+      coordField, stk::mesh::selectUnion(allSurfaces), nullptr);
+    meta.set_coordinate_field(&coordField);
+    meta.commit();
+
+    stk::mesh::EntityIdVector nodeIds(topo.num_nodes());
+    std::iota(nodeIds.begin(), nodeIds.end(), 8 * bulk.parallel_rank() + 1);
+
+    bulk.modification_begin();
+
+    for (auto id : nodeIds) {
+      bulk.declare_entity(
+        stk::topology::NODE_RANK, id, stk::mesh::PartVector{});
+    }
+    auto elem = stk::mesh::declare_element(
+      bulk, block_1, bulk.parallel_rank() + 1, nodeIds);
+    stk::mesh::create_all_sides(bulk, block_1, allSurfaces, false);
+
+    bulk.modification_end();
+
+    auto surfaceSelector = stk::mesh::selectUnion(allSurfaces);
+    stk::mesh::EntityVector all_faces;
+    stk::mesh::get_selected_entities(
+      surfaceSelector, bulk.get_buckets(meta.side_rank(), surfaceSelector),
+      all_faces);
+    ThrowRequire(all_faces.size() == topo.num_sides());
+
+    std::vector<std::vector<double>> nodeLocations = {
+      {-1, -1, -1}, {+1, -1, -1}, {+1, +1, -1}, {-1, +1, -1},
+      {-1, -1, +1}, {+1, -1, +1}, {+1, +1, +1}, {-1, +1, +1}};
+
+    const auto* nodes = bulk.begin_nodes(elem);
+    for (int j = 0; j < 8; ++j) {
+      for (int d = 0; d < 3; ++d) {
+        stk::mesh::field_data(coordField, nodes[j])[d] =
+          nodeLocations.at(j).at(d);
+      }
+    }
+
+    for (const auto* ib :
+         bulk.get_buckets(stk::topology::NODE_RANK, meta.universal_part())) {
+      for (auto node : *ib) {
+        *stk::mesh::field_data(gid_field, node) = bulk.identifier(node);
+      }
+    }
+    mesh = ngp::Mesh(bulk);
+    fill_id_fields(mesh, meta.universal_part(), gid_field, tpetra_gid_field);
+  }
+  stk::mesh::MetaData meta;
+  stk::mesh::BulkData bulk;
+  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
+  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
+    tpetra_gid_field;
+  ngp::Mesh mesh;
+};
+
+TEST_F(SimdConnectivityFixture, map_has_correct_outermost_index)
+{
+  const auto map = stk_connectivity_map<1>(mesh, meta.universal_part());
+  auto map_h = Kokkos::create_mirror_view(map);
+  Kokkos::deep_copy(map_h, map);
+
+  ASSERT_EQ(map_h.extent_int(0), 1);
+}
+
+TEST_F(SimdConnectivityFixture, map_has_valid_entries_for_existing_element)
+{
+  constexpr int order = 1;
+  const auto map = stk_connectivity_map<order>(mesh, meta.universal_part());
+  auto map_h = Kokkos::create_mirror_view(map);
+  Kokkos::deep_copy(map_h, map);
+
+  for (int k = 0; k < order + 1; ++k) {
+    for (int j = 0; j < order + 1; ++j) {
+      for (int i = 0; i < order + 1; ++i) {
+        ASSERT_TRUE(valid_mesh_index(map_h(0, k, j, i, 0)));
+      }
+    }
+  }
+}
+
+TEST_F(SimdConnectivityFixture, map_has_invalid_entries_for_nonexisting_element)
+{
+  if (simd_len > 1) {
+    constexpr int order = 1;
+    const auto map = stk_connectivity_map<order>(mesh, meta.universal_part());
+    auto map_h = Kokkos::create_mirror_view(map);
+    Kokkos::deep_copy(map_h, map);
+
+    for (int k = 0; k < order + 1; ++k) {
+      for (int j = 0; j < order + 1; ++j) {
+        for (int i = 0; i < order + 1; ++i) {
+          ASSERT_TRUE(!valid_mesh_index(map_h(0, k, j, i, 1)));
+        }
+      }
+    }
+  }
+}
+
+TEST_F(SimdConnectivityFixture, map_is_in_tensor_product_form)
+{
+  ngp::ConstStkFieldAdapter<double> coords(bulk, *meta.coordinate_field());
+  constexpr int order = 1;
+  const auto map = stk_connectivity_map<order>(mesh, meta.universal_part());
+  auto map_h = Kokkos::create_mirror_view(map);
+  Kokkos::deep_copy(map_h, map);
+  for (int k = 0; k < 2; ++k) {
+    for (int j = 0; j < 2; ++j) {
+      for (int i = 0; i < 2; ++i) {
+        const auto index = map_h(0, k, j, i, 0);
+        ASSERT_EQ(coords.get(index, 0), (i == 0) ? -1 : +1);
+        ASSERT_EQ(coords.get(index, 1), (j == 0) ? -1 : +1);
+        ASSERT_EQ(coords.get(index, 2), (k == 0) ? -1 : +1);
+      }
+    }
+  }
+}
+
+} // namespace matrix_free
+} // namespace nalu
+} // namespace sierra

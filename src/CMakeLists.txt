@@ -169,6 +169,7 @@ if(ENABLE_PARAVIEW_CATALYST)
 endif()
 
 add_subdirectory(element_promotion)
+add_subdirectory(matrix_free)
 add_subdirectory(kernel)
 add_subdirectory(edge_kernels)
 add_subdirectory(node_kernels)

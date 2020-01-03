@@ -8,13 +8,15 @@
 //
 
 
-
 #ifndef HeatCondEquationSystem_h
 #define HeatCondEquationSystem_h
 
 #include <EquationSystem.h>
 #include <FieldTypeDef.h>
 #include <NaluParsedTypes.h>
+
+#include "Kokkos_Array.hpp"
+#include "matrix_free/EquationUpdate.h"
 
 #include <stk_mesh/base/FieldBase.hpp>
 #include <stk_mesh/base/CoordinateSystems.hpp>
@@ -71,19 +73,24 @@ public:
       const std::map<std::string, std::string> &theNames,
       const std::map<std::string, std::vector<double> > &theParams);
 
+
+  double provide_norm();
+  double provide_scaled_norm();
+
   void solve_and_update();
   void compute_projected_nodal_gradient();
 
   void initialize();
   void reinitialize_linear_system();
- 
   void predict_state();
+  Kokkos::Array<double, 3> get_scaled_gammas();
+  void compute_volumetric_heat_capacity();
+
   
   virtual void load(const YAML::Node & node)
   {
     EquationSystem::load(node);
   }
-
 
   // allow equation system to manage a projected nodal gradient
   const bool managePNG_;
@@ -99,6 +106,8 @@ public:
   
   ScalarFieldType *density_;
   ScalarFieldType *specHeat_;
+  ScalarFieldType *volumetricHeatCapacity_;
+
   ScalarFieldType *thermalCond_;
 
   VectorFieldType *edgeAreaVec_;
@@ -106,6 +115,12 @@ public:
   AssembleNodalGradAlgorithmDriver *assembleNodalGradAlgDriver_;
   bool isInit_;
   ProjectedNodalGradientEquationSystem *projectedNodalGradEqs_;
+
+  bool matrixFree_{false};
+  stk::mesh::PartVector interiorParts_;
+  stk::mesh::PartVector dirichletParts_;
+  stk::mesh::PartVector fluxParts_;
+  std::unique_ptr<matrix_free::EquationUpdate> matrixFreeUpdate_;
 };
 
 } // namespace nalu

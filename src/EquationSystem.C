@@ -152,11 +152,7 @@ EquationSystem::set_nodal_gradient(
 bool
 EquationSystem::system_is_converged()
 {
-  bool isConverged = true;
-  if ( NULL != linsys_ ) {
-    isConverged = (linsys_->scaledNonLinearResidual() <  convergenceTolerance_ );
-  }
-  return isConverged;
+  return provide_scaled_norm() < convergenceTolerance_ ;
 }
 
 //--------------------------------------------------------------------------
@@ -192,7 +188,7 @@ EquationSystem::provide_norm()
 double
 EquationSystem::provide_norm_increment()
 {
-  return ( (NULL != linsys_) ? 1.0 : 0.0 );
+  return ( (NULL != linsys_ || realm_.matrixFree_) ? 1.0 : 0.0 );
 }
 
 //--------------------------------------------------------------------------
