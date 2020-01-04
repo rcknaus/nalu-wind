@@ -34,13 +34,7 @@ struct stk_simd_scalar_field_gather_t
 };
 } // namespace impl
 P_INVOKEABLE(stk_simd_scalar_field_gather)
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
 namespace impl {
 template <int p>
 struct stk_simd_vector_field_gather_t
@@ -52,13 +46,7 @@ struct stk_simd_vector_field_gather_t
 };
 } // namespace impl
 P_INVOKEABLE(stk_simd_vector_field_gather)
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
 namespace impl {
 template <int p>
 struct stk_simd_face_scalar_field_gather_t
@@ -70,13 +58,7 @@ struct stk_simd_face_scalar_field_gather_t
 };
 } // namespace impl
 P_INVOKEABLE(stk_simd_face_scalar_field_gather)
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
 namespace impl {
 template <int p>
 struct stk_simd_face_vector_field_gather_t
@@ -88,15 +70,10 @@ struct stk_simd_face_vector_field_gather_t
 };
 } // namespace impl
 P_INVOKEABLE(stk_simd_face_vector_field_gather)
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
 void stk_simd_scalar_node_gather(
   const_node_mesh_index_view, const ngp::ConstField<double>&, node_scalar_view);
+
 }
 } // namespace nalu
 } // namespace sierra

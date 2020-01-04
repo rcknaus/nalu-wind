@@ -716,7 +716,7 @@ Realm::load(const YAML::Node & node)
     doPromotion_ = true;
   }
 
-  if (promotionOrder_ > 5) {
+  if (promotionOrder_ >= 5) {
     throw std::runtime_error("Only polynomial orders 1-4 supported");
   }
 

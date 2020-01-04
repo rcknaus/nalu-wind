@@ -22,6 +22,7 @@ class BulkData;
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
+namespace impl {
 
 KOKKOS_INLINE_FUNCTION int
 bucket_index(int bktIndex, int simdElemIndex)
@@ -49,20 +50,6 @@ get_length_of_next_simd_group(int index, int length)
   return nextLength;
 }
 
-inline int
-num_simd_elements(
-  const ngp::Mesh& mesh,
-  stk::topology::rank_t rank,
-  const stk::mesh::Selector& selector)
-{
-  const auto buckets = mesh.get_bucket_ids(rank, selector);
-  int mesh_index = 0;
-  for (unsigned id = 0u; id < buckets.size(); ++id) {
-    mesh_index +=
-      get_num_simd_groups(mesh.get_bucket(rank, buckets[id]).size());
-  }
-  return mesh_index;
-}
 
 inline stk::NgpVector<int>
 simd_bucket_offsets(
@@ -85,13 +72,22 @@ simd_bucket_offsets(
   return simd_offset;
 }
 
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
+}
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
+inline int
+num_simd_elements(
+  const ngp::Mesh& mesh,
+  stk::topology::rank_t rank,
+  const stk::mesh::Selector& selector)
+{
+  const auto buckets = mesh.get_bucket_ids(rank, selector);
+  int mesh_index = 0;
+  for (unsigned id = 0u; id < buckets.size(); ++id) {
+    mesh_index +=
+      impl::get_num_simd_groups(mesh.get_bucket(rank, buckets[id]).size());
+  }
+  return mesh_index;
+}
 
 template <typename ValidFunc, typename RemainderFunc>
 void
@@ -103,7 +99,7 @@ simd_traverse(
   RemainderFunc rem)
 {
   auto buckets = mesh.get_bucket_ids(rank, active);
-  const auto bucket_offsets = simd_bucket_offsets(mesh, rank, buckets);
+  const auto bucket_offsets = impl::simd_bucket_offsets(mesh, rank, buckets);
   Kokkos::parallel_for(
     Kokkos::TeamPolicy<exec_space, ngp::ScheduleType>(
       buckets.size(), Kokkos::AUTO),
@@ -113,17 +109,17 @@ simd_traverse(
       const auto& b = mesh.get_bucket(rank, bucket_id);
       const auto bucket_len = b.size();
       Kokkos::parallel_for(
-        Kokkos::TeamThreadRange(team, get_num_simd_groups(bucket_len)),
+        Kokkos::TeamThreadRange(team, impl::get_num_simd_groups(bucket_len)),
         [&](int e) {
           const int num_simd_elems =
-            get_length_of_next_simd_group(e, bucket_len);
+            impl::get_length_of_next_simd_group(e, bucket_len);
           const int simd_elem_index =
             bucket_offsets.device_get(team.league_rank()) + e;
           for (int ne = 0; ne < num_simd_elems; ++ne) {
-            func(simd_elem_index, ne, b[bucket_index(e, ne)]);
+            func(simd_elem_index, ne, b[impl::bucket_index(e, ne)]);
           }
           for (int ne = num_simd_elems; ne < simd_len; ++ne) {
-            rem(simd_elem_index, ne, b[bucket_index(e, 0)]);
+            rem(simd_elem_index, ne, b[impl::bucket_index(e, 0)]);
           }
         });
     });

@@ -32,9 +32,9 @@ diffusive_flux(
 
     for (int s = 0; s < p + 1; ++s) {
       for (int r = 0; r < p + 1; ++r) {
-        static constexpr auto flux_point_interpolant = Coeffs<p>::Nt;
         ftype acc = 0;
         for (int q = 0; q < p + 1; ++q) {
+          static constexpr auto flux_point_interpolant = Coeffs<p>::Nt;
           acc +=
             flux_point_interpolant(l, q) * shuffled_access<dir>(delta, s, r, q);
         }

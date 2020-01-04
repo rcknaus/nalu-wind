@@ -1,5 +1,5 @@
 #include "matrix_free/StkToTpetraMap.h"
-#include "matrix_free/make_rcp.hpp"
+#include "matrix_free/MakeRCP.h"
 
 #include <Teuchos_ArrayView.hpp>
 #include <Teuchos_DefaultMpiComm.hpp>

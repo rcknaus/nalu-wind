@@ -3,7 +3,7 @@
 #include "matrix_free/LinearDiffusionMetric.h"
 #include "matrix_free/LinearVolume.h"
 #include "matrix_free/KokkosFramework.h"
-#include "matrix_free/make_rcp.hpp"
+#include "matrix_free/MakeRCP.h"
 
 #include <KokkosCompat_ClassicNodeAPI_Wrapper.hpp>
 #include <Kokkos_Array.hpp>

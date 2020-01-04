@@ -25,7 +25,7 @@
 #include "matrix_free/ConductionFields.h"
 #include "StkConductionFixture.h"
 #include "matrix_free/KokkosFramework.h"
-#include "matrix_free/make_rcp.hpp"
+#include "matrix_free/MakeRCP.h"
 #include "gtest/gtest.h"
 #include "mpi.h"
 #include "stk_mesh/base/BulkData.hpp"

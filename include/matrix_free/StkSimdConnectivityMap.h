@@ -43,13 +43,7 @@ struct stk_connectivity_map_t
 };
 } // namespace impl
 P_INVOKEABLE(stk_connectivity_map)
-} // namespace matrix_free
-} // namespace nalu
-} // namespace sierra
 
-namespace sierra {
-namespace nalu {
-namespace matrix_free {
 static constexpr int invalid_offset = -1;
 namespace impl {
 template <int p>

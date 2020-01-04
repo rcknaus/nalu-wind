@@ -53,7 +53,7 @@ stk_connectivity_map_t<p>::invoke(
       }
     });
   return entity_elem;
-} // namespace impl
+}
 INSTANTIATE_POLYSTRUCT(stk_connectivity_map_t);
 
 template <int p>
@@ -91,7 +91,7 @@ create_offset_map_t<p>::invoke(
       }
     });
   return elem_offset;
-} // namespace impl
+}
 
 INSTANTIATE_POLYSTRUCT(create_offset_map_t);
 } // namespace impl
