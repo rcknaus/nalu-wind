@@ -6,55 +6,40 @@
 #include "matrix_free/Coefficients.h"
 #include "matrix_free/KokkosFramework.h"
 #include "matrix_free/LocalArray.h"
+#include "matrix_free/ShuffledAccess.h"
 
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-template <int p, typename InArray, typename ScratchArray, typename OutArray>
-KOKKOS_FUNCTION void
-volume(
-  const InArray& in,
-  const typename Coeffs<p>::nodal_matrix_type& vandermonde,
-  ScratchArray& scratch_1,
-  ScratchArray& scratch_2,
-  OutArray& out)
+template <int p, int dir, typename InArray, typename OutArray>
+KOKKOS_FORCEINLINE_FUNCTION void
+edge_integral(const InArray& in, OutArray& out)
 {
   for (int k = 0; k < p + 1; ++k) {
     for (int j = 0; j < p + 1; ++j) {
       for (int i = 0; i < p + 1; ++i) {
+        const int l = impl::active_index<dir>::index_0(k, j, i);
+        const int m = impl::active_index<dir>::index_1(k, j, i);
+        const int n = impl::active_index<dir>::index_2(k, j, i);
         ftype acc(0);
         for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(i, q) * in(k, j, q);
-        }
-        scratch_1(k, j, i) = acc;
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(j, q) * scratch_1(k, q, i);
-        }
-        scratch_2(k, j, i) = acc;
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(k, q) * scratch_2(q, j, i);
+          static constexpr auto vandermonde = Coeffs<p>::W;
+          acc += vandermonde(l, q) * shuffled_access<dir>(in, n, m, q);
         }
         out(k, j, i) = acc;
       }
     }
   }
+}
+
+template <int p, typename InArray, typename ScratchArray, typename OutArray>
+KOKKOS_FUNCTION void
+volume(const InArray& in, ScratchArray& scratch, OutArray& out)
+{
+  edge_integral<p, 0>(in, out);
+  edge_integral<p, 1>(out, scratch);
+  edge_integral<p, 2>(scratch, out);
 }
 
 template <
@@ -74,46 +59,19 @@ consistent_mass_time_derivative(
   ScratchArray& scratch,
   OutArray& out)
 {
-  static constexpr auto vandermonde = Coeffs<p>::W;
-
   for (int k = 0; k < p + 1; ++k) {
     for (int j = 0; j < p + 1; ++j) {
       for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc -=
-            vandermonde(i, q) * vol(index, k, j, i) *
-            (gammas[0] * qp1(index, k, j, i) + gammas[1] * qp0(index, k, j, i) +
-             gammas[2] * qm1(index, k, j, i));
-        }
-        out(k, j, i) = acc;
+        scratch(k, j, i) =
+          -vol(index, k, j, i) *
+          (gammas[0] * qp1(index, k, j, i) + gammas[1] * qp0(index, k, j, i) +
+           gammas[2] * qm1(index, k, j, i));
       }
     }
   }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(j, q) * out(k, q, i);
-        }
-        scratch(k, j, i) = acc;
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(k, q) * scratch(q, j, i);
-        }
-        out(k, j, i) = acc;
-      }
-    }
-  }
+  edge_integral<p, 0>(scratch, out);
+  edge_integral<p, 1>(out, scratch);
+  edge_integral<p, 2>(scratch, out);
 }
 
 template <int p, typename VolumeArray, typename InArray, typename OutArray>
@@ -157,8 +115,6 @@ mass_term(
   ScratchArray& scratch,
   OutArray& out)
 {
-  static constexpr auto vandermonde = Coeffs<p>::W;
-
   for (int k = 0; k < p + 1; ++k) {
     for (int j = 0; j < p + 1; ++j) {
       for (int i = 0; i < p + 1; ++i) {
@@ -166,42 +122,9 @@ mass_term(
       }
     }
   }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc = 0;
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(i, q) * scratch(k, j, q);
-        }
-        out(k, j, i) = acc;
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc = 0;
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(j, q) * out(k, q, i);
-        }
-        scratch(k, j, i) = acc;
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ftype acc(0);
-        for (int q = 0; q < p + 1; ++q) {
-          acc += vandermonde(k, q) * scratch(q, j, i);
-        }
-        out(k, j, i) = acc;
-      }
-    }
-  }
+  edge_integral<p, 0>(scratch, out);
+  edge_integral<p, 1>(out, scratch);
+  edge_integral<p, 2>(scratch, out);
 }
 
 template <int p, typename VolumeArray, typename DeltaArray, typename OutArray>

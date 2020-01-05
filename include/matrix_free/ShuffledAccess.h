@@ -65,6 +65,35 @@ struct shuffled_accessor<ViewType, 2>
   }
 };
 
+template <int d>
+struct active_index
+{
+};
+
+template <>
+struct active_index<0>
+{
+  KOKKOS_FORCEINLINE_FUNCTION static int index_0(int, int, int i) { return i; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_1(int, int j, int) { return j; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_2(int k, int, int) { return k; }
+};
+
+template <>
+struct active_index<1>
+{
+  KOKKOS_FORCEINLINE_FUNCTION static int index_0(int, int j, int) { return j; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_1(int, int, int i) { return i; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_2(int k, int, int) { return k; }
+};
+
+template <>
+struct active_index<2>
+{
+  KOKKOS_FORCEINLINE_FUNCTION static int index_0(int k, int, int) { return k; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_1(int, int, int i) { return i; }
+  KOKKOS_FORCEINLINE_FUNCTION static int index_2(int, int j, int) { return j; }
+};
+
 } // namespace impl
 
 template <int d, typename ViewType>

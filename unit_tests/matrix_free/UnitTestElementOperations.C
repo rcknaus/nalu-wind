@@ -125,7 +125,6 @@ TEST(element_operations, scs_interp)
   }
 }
 
-
 TEST(element_operations, integrate_volume)
 {
   constexpr int p = inst::P2;
@@ -148,8 +147,6 @@ TEST(element_operations, integrate_volume)
   }
   scs_end_loc[p + 1] = +1;
 
-  LocalArray<ftype[p + 1][p + 1][p + 1]> scratch_1;
-  LocalArray<ftype[p + 1][p + 1][p + 1]> scratch_2;
   LocalArray<ftype[p + 1][p + 1][p + 1]> volumes;
   for (int k = 0; k < p + 1; ++k) {
     for (int j = 0; j < p + 1; ++j) {
@@ -158,7 +155,8 @@ TEST(element_operations, integrate_volume)
       }
     }
   }
-  volume<p>(nodal_values, Coeffs<p>::W, scratch_1, scratch_2, volumes);
+  LocalArray<ftype[p + 1][p + 1][p + 1]> scratch;
+  volume<p>(nodal_values, scratch, volumes);
 
   for (int k = 0; k < p + 1; ++k) {
     for (int j = 0; j < p + 1; ++j) {
