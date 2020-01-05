@@ -11,9 +11,6 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-#define LEVEL_0 0
-#define LEVEL_1 1
-
 template <
   int p,
   int dir,
@@ -27,6 +24,7 @@ diffusive_flux(
   const DeltaArray& delta,
   OutArray& out)
 {
+  enum { LEVEL_0 = 0, LEVEL_1 = 1};
   for (int l = 0; l < p; ++l) {
     LocalArray<ftype[2][p + 1][p + 1]> scratch;
 
@@ -102,12 +100,6 @@ diffusive_flux(
     }
   }
 }
-
-#undef LEVEL_0
-#undef LEVEL_1
-#undef XH
-#undef YH
-#undef ZH
 
 } // namespace matrix_free
 } // namespace nalu
