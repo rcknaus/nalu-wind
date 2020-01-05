@@ -3,7 +3,6 @@
 
 #include "matrix_free/Coefficients.h"
 #include "matrix_free/ElementFluxIntegral.h"
-#include "matrix_free/ElementSCSGradient.h"
 #include "matrix_free/ElementSCSInterpolate.h"
 #include "matrix_free/ElementVolumeIntegral.h"
 #include "matrix_free/GaussLegendreQuadratureRule.h"
@@ -28,16 +27,6 @@ poly_val(std::vector<double> coeffs, double x)
   double val = 0.0;
   for (unsigned j = 0; j < coeffs.size(); ++j) {
     val += coeffs[j] * std::pow(x, j);
-  }
-  return val;
-}
-
-double
-poly_der(std::vector<double> coeffs, double x)
-{
-  double val = 0.0;
-  for (unsigned j = 1; j < coeffs.size(); ++j) {
-    val += coeffs[j] * std::pow(x, j - 1) * j;
   }
   return val;
 }
@@ -71,21 +60,6 @@ struct TensorPoly
   double operator()(double x, double y, double z)
   {
     return poly_val(coeffsX, x) * poly_val(coeffsY, y) * poly_val(coeffsZ, z);
-  }
-
-  double grad_x(double x, double y, double z)
-  {
-    return poly_der(coeffsX, x) * poly_val(coeffsY, y) * poly_val(coeffsZ, z);
-  }
-
-  double grad_y(double x, double y, double z)
-  {
-    return poly_val(coeffsX, x) * poly_der(coeffsY, y) * poly_val(coeffsZ, z);
-  }
-
-  double grad_z(double x, double y, double z)
-  {
-    return poly_val(coeffsX, x) * poly_val(coeffsY, y) * poly_der(coeffsZ, z);
   }
 
   double
@@ -151,85 +125,6 @@ TEST(element_operations, scs_interp)
   }
 }
 
-TEST(element_operations, grad)
-{
-  constexpr int p = inst::P2;
-  LocalArray<ftype[p + 1][p + 1][p + 1]> nodal_values;
-
-  auto poly = TensorPoly(p);
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        nodal_values(k, j, i) =
-          poly(GLL<p>::nodes[i], GLL<p>::nodes[j], GLL<p>::nodes[k]);
-      }
-    }
-  }
-
-  LocalArray<ftype[3][p][p + 1][p + 1][3]> grad_values;
-  LocalArray<ftype[3][p][p + 1][p + 1]> interp_values;
-
-  grad_scs<p>(
-    nodal_values, Coeffs<p>::Nt, Coeffs<p>::Dt, Coeffs<p>::D, interp_values,
-    grad_values);
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p; ++i) {
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(0, i, k, j, 0),
-          poly.grad_x(LGL<p>::nodes[i], GLL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(0, i, k, j, 1),
-          poly.grad_y(LGL<p>::nodes[i], GLL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(0, i, k, j, 2),
-          poly.grad_z(LGL<p>::nodes[i], GLL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-      }
-    }
-  }
-
-  for (int k = 0; k < p + 1; ++k) {
-    for (int j = 0; j < p; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(1, j, k, i, 0),
-          poly.grad_x(GLL<p>::nodes[i], LGL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(1, j, k, i, 1),
-          poly.grad_y(GLL<p>::nodes[i], LGL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(1, j, k, i, 2),
-          poly.grad_z(GLL<p>::nodes[i], LGL<p>::nodes[j], GLL<p>::nodes[k]),
-          my_tol);
-      }
-    }
-  }
-
-  for (int k = 0; k < p; ++k) {
-    for (int j = 0; j < p + 1; ++j) {
-      for (int i = 0; i < p + 1; ++i) {
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(2, k, j, i, 0),
-          poly.grad_x(GLL<p>::nodes[i], GLL<p>::nodes[j], LGL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(2, k, j, i, 1),
-          poly.grad_y(GLL<p>::nodes[i], GLL<p>::nodes[j], LGL<p>::nodes[k]),
-          my_tol);
-        ASSERT_DOUBLETYPE_NEAR(
-          grad_values(2, k, j, i, 2),
-          poly.grad_z(GLL<p>::nodes[i], GLL<p>::nodes[j], LGL<p>::nodes[k]),
-          my_tol);
-      }
-    }
-  }
-}
 
 TEST(element_operations, integrate_volume)
 {

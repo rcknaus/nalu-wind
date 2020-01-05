@@ -8,6 +8,7 @@ target_sources(${utest_ex_name} PRIVATE
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestConductionOperator.C
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestConductionUpdate.C
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestConductionSolutionUpdate.C
+   ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestElementOperations.C
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestLinearDiffusionMetric.C
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestLinearExposedAreas.C
    ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestLinearVolume.C

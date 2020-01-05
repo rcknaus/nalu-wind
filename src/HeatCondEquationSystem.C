@@ -1107,12 +1107,12 @@ HeatCondEquationSystem::solve_and_update()
       matrixFreeUpdate_->compute_update(get_scaled_gammas(), 
          realm_.ngp_field_manager().get_field<double>(tTmp_->mesh_meta_data_ordinal()));
       const double time_solve_end = NaluEnv::self().nalu_time();
-      timerSolve_ += (time_solve_end-time_solve_start);
-
       if (realm_.hasPeriodic_) {
         realm_.periodic_field_update(tTmp_, 1);
       }
       matrixFreeUpdate_->banner(name_, NaluEnv::self().naluOutputP0());
+      timerSolve_ += (time_solve_end-time_solve_start);
+
     }
     else{
       assemble_and_solve(tTmp_);
@@ -1123,10 +1123,10 @@ HeatCondEquationSystem::solve_and_update()
     solution_update(
       1.0, *tTmp_,
       1.0, temperature_->field_of_state(stk::mesh::StateNP1));
-    double timeB = NaluEnv::self().nalu_time();
     if (matrixFree_) {
       matrixFreeUpdate_->update_solution_fields();
     }
+    double timeB = NaluEnv::self().nalu_time();
     timerAssemble_ += (timeB-timeA);
    
     // projected nodal gradient

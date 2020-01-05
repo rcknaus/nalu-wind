@@ -21,12 +21,12 @@ single_cube_hex_p()
   const int num_elems_1D = 32 / p;
   const int num_elems_2D = num_elems_1D * num_elems_1D;
 
-  constexpr auto nodes = GLL<p>::nodes;
   face_vector_view<p> coords("coordinates", num_elems_2D);
   Kokkos::parallel_for(
     num_elems_2D, KOKKOS_LAMBDA(int index) {
       for (int j = 0; j < p + 1; ++j) {
         for (int i = 0; i < p + 1; ++i) {
+          constexpr auto nodes = GLL<p>::nodes;
           coords(index, j, i, 0) = nodes[i];
           coords(index, j, i, 1) = nodes[j];
           coords(index, j, i, 2) = 0;

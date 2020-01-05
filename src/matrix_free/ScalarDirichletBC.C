@@ -1,7 +1,4 @@
 #include "matrix_free/ScalarDirichletBC.h"
-
-#include "matrix_free/ConductionInterior.h"
-#include "matrix_free/ConductionFields.h"
 #include "matrix_free/PolynomialOrders.h"
 #include "matrix_free/ValidSimdLength.h"
 #include "matrix_free/KokkosFramework.h"

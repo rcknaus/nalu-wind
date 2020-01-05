@@ -1,6 +1,5 @@
 #include "matrix_free/ConductionSolutionUpdate.h"
 #include "matrix_free/MatrixFreeSolver.h"
-#include "matrix_free/ConductionInterior.h"
 #include "matrix_free/ConductionFields.h"
 #include "matrix_free/ConductionJacobiPreconditioner.h"
 #include "matrix_free/ConductionOperator.h"

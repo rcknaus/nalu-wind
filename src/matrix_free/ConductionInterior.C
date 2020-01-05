@@ -110,14 +110,7 @@ conduction_linearized_residual_t<p>::invoke(
         narray scratch;
         mass_term<p>(index, gamma, volume_metric, delta, scratch, element_rhs);
       } else {
-        for (int k = 0; k < p + 1; ++k) {
-          for (int j = 0; j < p + 1; ++j) {
-            for (int i = 0; i < p + 1; ++i) {
-              element_rhs(k, j, i) =
-                -gamma * volume_metric(index, k, j, i) * delta(k, j, i);
-            }
-          }
-        }
+        lumped_mass_term<p>(index, gamma, volume_metric, delta, element_rhs);
       }
 
       diffusive_flux<p, 0>(index, diffusion_metric, delta, element_rhs);
