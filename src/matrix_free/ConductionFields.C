@@ -17,85 +17,63 @@
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
+
+namespace {
+int
+stk_ordinal(
+  const stk::mesh::MetaData& meta,
+  std::string name,
+  stk::mesh::FieldState fs = stk::mesh::StateNone)
+{
+  ThrowRequireMsg(
+    meta.get_field(stk::topology::NODE_RANK, name), conduction_info::q_name);
+
+  ThrowRequireMsg(
+    meta.get_field(stk::topology::NODE_RANK, name)->field_state(fs),
+    std::string(conduction_info::q_name) + " has no state " +
+      std::to_string((fs)));
+
+  return static_cast<int>(meta.get_field(stk::topology::NODE_RANK, name)
+                            ->field_state(fs)
+                            ->mesh_meta_data_ordinal());
+}
+} // namespace
+
 Kokkos::Array<int, conduction_info::num_physics_fields>
 conduction_field_ordinals(const stk::mesh::MetaData& meta)
 {
   Kokkos::Array<int, conduction_info::num_physics_fields> cf;
-  ThrowRequireMsg(
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name),
-    conduction_info::q_name);
-
-  ThrowRequireMsg(
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name)
-      ->field_state(stk::mesh::StateNM1),
-    "Only BDF2 supported");
-
   cf[conduction_info::TEMPERATURE_NP1] =
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name)
-      ->field_state(stk::mesh::StateNP1)
-      ->mesh_meta_data_ordinal();
+    stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateNP1);
   cf[conduction_info::TEMPERATURE_NP0] =
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name)
-      ->field_state(stk::mesh::StateN)
-      ->mesh_meta_data_ordinal();
+    stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateN);
   cf[conduction_info::TEMPERATURE_NM1] =
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name)
-      ->field_state(stk::mesh::StateNM1)
-      ->mesh_meta_data_ordinal();
-
-  ThrowRequireMsg(
-    meta.get_field(
-      stk::topology::NODE_RANK, conduction_info::volume_weight_name),
-    conduction_info::volume_weight_name);
-
+    stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateNM1);
   cf[conduction_info::ALPHA] =
-    meta
-      .get_field(stk::topology::NODE_RANK, conduction_info::volume_weight_name)
-      ->mesh_meta_data_ordinal();
-
-  ThrowRequireMsg(
-    meta.get_field(
-      stk::topology::NODE_RANK, conduction_info::diffusion_weight_name),
-    conduction_info::diffusion_weight_name);
+    stk_ordinal(meta, conduction_info::volume_weight_name);
   cf[conduction_info::LAMBDA] =
-    meta
-      .get_field(
-        stk::topology::NODE_RANK, conduction_info::diffusion_weight_name)
-      ->mesh_meta_data_ordinal();
+    stk_ordinal(meta, conduction_info::diffusion_weight_name);
   return cf;
 }
 
 Kokkos::Array<int, conduction_info::num_coefficient_fields>
 conduction_coefficient_ordinals(const stk::mesh::MetaData& meta)
 {
-  return {{
-    static_cast<int>(
-      meta
-        .get_field(
-          stk::topology::NODE_RANK, conduction_info::volume_weight_name)
-        ->mesh_meta_data_ordinal()),
-    static_cast<int>(
-      meta
-        .get_field(
-          stk::topology::NODE_RANK, conduction_info::diffusion_weight_name)
-        ->mesh_meta_data_ordinal()),
+  return Kokkos::Array<int, conduction_info::num_coefficient_fields>{{
+    stk_ordinal(meta, conduction_info::volume_weight_name),
+    stk_ordinal(meta, conduction_info::diffusion_weight_name),
   }};
 }
 
 int
 dirichlet_bc_ordinal(const stk::mesh::MetaData& meta)
 {
-  ThrowRequireMsg(
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::qbc_name),
-    conduction_info::qbc_name);
   if (
     meta.get_field(stk::topology::NODE_RANK, conduction_info::qbc_name) ==
     nullptr) {
     return -1;
   }
-  return int(
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::qbc_name)
-      ->mesh_meta_data_ordinal());
+  return stk_ordinal(meta, conduction_info::qbc_name);
 }
 
 int
@@ -106,9 +84,7 @@ flux_bc_ordinal(const stk::mesh::MetaData& meta)
     nullptr) {
     return -1;
   }
-  return int(
-    meta.get_field(stk::topology::NODE_RANK, conduction_info::flux_name)
-      ->mesh_meta_data_ordinal());
+  return stk_ordinal(meta, conduction_info::flux_name);
 }
 
 } // namespace matrix_free

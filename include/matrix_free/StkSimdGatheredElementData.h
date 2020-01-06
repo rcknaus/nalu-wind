@@ -74,7 +74,7 @@ P_INVOKEABLE(stk_simd_face_vector_field_gather)
 void stk_simd_scalar_node_gather(
   const_node_mesh_index_view, const ngp::ConstField<double>&, node_scalar_view);
 
-}
+} // namespace matrix_free
 } // namespace nalu
 } // namespace sierra
 

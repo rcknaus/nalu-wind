@@ -24,7 +24,7 @@ diffusive_flux(
   const DeltaArray& delta,
   OutArray& out)
 {
-  enum { LEVEL_0 = 0, LEVEL_1 = 1};
+  enum { LEVEL_0 = 0, LEVEL_1 = 1 };
   for (int l = 0; l < p; ++l) {
     LocalArray<ftype[2][p + 1][p + 1]> scratch;
 

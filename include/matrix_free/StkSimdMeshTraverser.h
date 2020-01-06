@@ -50,7 +50,6 @@ get_length_of_next_simd_group(int index, int length)
   return nextLength;
 }
 
-
 inline stk::NgpVector<int>
 simd_bucket_offsets(
   const ngp::Mesh& mesh,
@@ -72,7 +71,7 @@ simd_bucket_offsets(
   return simd_offset;
 }
 
-}
+} // namespace impl
 
 inline int
 num_simd_elements(

@@ -35,21 +35,19 @@ diffusion_diagonal(
         const ftype Ws = vandermonde(s, s);
         const ftype Wr = vandermonde(r, r);
         const ftype orth = Ws * Wr * metric(index, dir, l, s, r, 0);
-        ftype non_orth_y = 0;
-        ftype non_orth_z = 0;
+        ftype non_orth = 0;
         for (int q = 0; q < p + 1; ++q) {
-          non_orth_y += Ws * vandermonde(r, q) * nodal_derivative(q, r) *
-                        metric(index, dir, l, s, q, 1);
-          non_orth_z += Wr * vandermonde(s, q) * nodal_derivative(q, s) *
+          non_orth += Ws * vandermonde(r, q) * nodal_derivative(q, r) *
+                        metric(index, dir, l, s, q, 1) +
+                      Wr * vandermonde(s, q) * nodal_derivative(q, s) *
                         metric(index, dir, l, q, r, 2);
         }
-
         shuffled_access<dir>(lhs, s, r, l + 0) +=
           orth * flux_point_derivative(l, l + 0) +
-          flux_point_interpolant(l, l + 0) * (non_orth_y + non_orth_z);
+          flux_point_interpolant(l, l + 0) * non_orth;
         shuffled_access<dir>(lhs, s, r, l + 1) -=
           orth * flux_point_derivative(l, l + 1) +
-          flux_point_interpolant(l, l + 1) * (non_orth_y + non_orth_z);
+          flux_point_interpolant(l, l + 1) * non_orth;
       }
     }
   }
@@ -74,6 +72,7 @@ conduction_diagonal_t<p>::invoke(
       constexpr auto nodal_derivative = Coeffs<p>::D;
       constexpr auto vandermonde = Coeffs<p>::W;
       constexpr auto Wl = Coeffs<p>::Wl;
+
       LocalArray<ftype[p + 1][p + 1][p + 1]> lhs;
       for (int k = 0; k < p + 1; ++k) {
         const auto gammaWk = gamma * Wl(k);
