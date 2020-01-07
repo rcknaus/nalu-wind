@@ -1,5 +1,5 @@
-#ifndef CONDUCTION_H
-#define CONDUCTION_H
+#ifndef CONDUCTION_INTERIOR_H
+#define CONDUCTION_INTERIOR_H
 
 #include <KokkosCompat_ClassicNodeAPI_Wrapper.hpp>
 #include <Kokkos_Array.hpp>

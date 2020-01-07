@@ -4890,8 +4890,5 @@ bool Realm::matrix_free() const
   return matrixFree_;
 }
 
-
-
-
 } // namespace nalu
 } // namespace Sierra

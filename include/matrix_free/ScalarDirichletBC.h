@@ -1,5 +1,5 @@
-#ifndef DIRICHLET_H
-#define DIRICHLET_H
+#ifndef SCALAR_DIRICHLET_BC_H
+#define SCALAR_DIRICHLET_BC_H
 
 #include <Tpetra_MultiVector_decl.hpp>
 

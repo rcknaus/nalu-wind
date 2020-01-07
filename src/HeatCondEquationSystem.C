@@ -140,12 +140,12 @@ HeatCondEquationSystem::HeatCondEquationSystem(
     projectedNodalGradEqs_(NULL)
 {
   matrixFree_ = realm_.matrix_free();
+
   if (!matrixFree_) {
     // extract solver name and solver object
     std::string solverName = realm_.equationSystems_.get_solver_block_name("temperature");
     LinearSolver *solver = realm_.root()->linearSolvers_->create_solver(solverName, EQ_TEMPERATURE);
     linsys_ = LinearSystem::create(realm_, 1, this, solver);
-
 
     // determine nodal gradient form
     set_nodal_gradient("temperature");
@@ -315,10 +315,9 @@ HeatCondEquationSystem::register_interior_algorithm(
   stk::mesh::Part *part)
 {
   if (matrixFree_) {
-    ThrowRequireMsg(part->topology() == stk::topology::HEX_8
-                || part->topology() == stk::topology::HEX_27
-                || part->topology().is_superelement(),
-      "Only pure hex8/hex27 meshes supported, found" + part->topology().name() + "for part " + part->name());
+    ThrowRequireMsg(matrix_free::part_is_valid_for_matrix_free(realm_.polynomial_order(), *part), "part "
+      + part->name() + "has invalid topology " + part->topology().name()
+      +  ". only Hex8 and Hex27 supported");
     interiorParts_.push_back(part);
     return;
   }
@@ -508,6 +507,12 @@ HeatCondEquationSystem::register_wall_bc(
   const stk::topology &partTopo,
   const WallBoundaryConditionData &wallBCData)
 {
+
+  if (matrixFree_) {
+    ThrowRequireMsg(matrix_free::part_is_valid_for_matrix_free(realm_.polynomial_order(), *part), "part "
+      + part->name() + " has invalid topology " + part->topology().name()
+      +  ". Only Quad4 and Quad9 supported");
+  }
 
   const AlgorithmType algType = WALL;
 
@@ -937,6 +942,10 @@ void
 HeatCondEquationSystem::initialize()
 {
   if (matrixFree_) {
+    if (realm_.number_of_states() != 3u) {
+      throw std::runtime_error("Only BDF2 supported for matrix free heat conduction");
+    }
+
     matrix_free::fill_tpetra_id_field(
       realm_.ngp_mesh(), 
       stk::mesh::selectUnion(interiorParts_),
@@ -1089,11 +1098,15 @@ HeatCondEquationSystem::solve_and_update()
   }
 
   if (matrixFree_) {
-    const double time_assemble_start = NaluEnv::self().nalu_time();
+    const double time_precond_start = NaluEnv::self().nalu_time();
     matrixFreeUpdate_->compute_preconditioner(realm_.get_gamma1()/realm_.get_time_step());
+    const double time_precond_end = NaluEnv::self().nalu_time();
+    timerPrecond_ += (time_precond_end - time_precond_start);
+
+    const double time_assemble_start = NaluEnv::self().nalu_time();
     matrixFreeUpdate_->update_solution_fields();
     const double time_assemble_end = NaluEnv::self().nalu_time();
-    timerAssemble_ += (time_assemble_end-time_assemble_start);
+    timerAssemble_ += (time_assemble_end - time_assemble_start);
   }
 
   for ( int k = 0; k < maxIterations_; ++k ) {
@@ -1107,12 +1120,19 @@ HeatCondEquationSystem::solve_and_update()
       matrixFreeUpdate_->compute_update(get_scaled_gammas(), 
          realm_.ngp_field_manager().get_field<double>(tTmp_->mesh_meta_data_ordinal()));
       const double time_solve_end = NaluEnv::self().nalu_time();
+      timerSolve_ += (time_solve_end-time_solve_start);
+
+      const double time_assemble_start = NaluEnv::self().nalu_time();
       if (realm_.hasPeriodic_) {
         realm_.periodic_field_update(tTmp_, 1);
       }
-      matrixFreeUpdate_->banner(name_, NaluEnv::self().naluOutputP0());
-      timerSolve_ += (time_solve_end-time_solve_start);
+      const double time_assemble_end = NaluEnv::self().nalu_time();
+      timerAssemble_ += (time_assemble_end-time_assemble_start);
 
+      const double time_misc_start = NaluEnv::self().nalu_time();
+      matrixFreeUpdate_->banner(name_, NaluEnv::self().naluOutputP0());
+      const double time_misc_end = NaluEnv::self().nalu_time();
+      timerMisc_ += (time_misc_end - time_misc_start);
     }
     else{
       assemble_and_solve(tTmp_);

@@ -28,6 +28,39 @@ public:
   virtual void banner(std::string, std::ostream&) const = 0;
 };
 
+inline bool
+part_is_valid_for_matrix_free(int order, const stk::mesh::Part& part)
+{
+  return true;
+  if (
+    part.topology() == stk::topology::HEX_8 ||
+    part.topology() == stk::topology::QUAD_4) {
+    return order == 1;
+  }
+
+  if (
+    part.topology() == stk::topology::HEX_27 ||
+    part.topology() == stk::topology::QUAD_9) {
+    return order == 2;
+  }
+
+  if (part.topology().is_superelement()) {
+    return order == std::cbrt(part.topology().num_nodes() + 1);
+  }
+
+  if (part.topology().is_superface()) {
+    return order == std::sqrt(part.topology().num_nodes() + 1);
+  }
+
+  for (const auto* subpart : part.subsets()) {
+    if (subpart == nullptr) {
+      return false;
+    }
+    return part_is_valid_for_matrix_free(order, *subpart);
+  }
+  return false;
+}
+
 template <template <int> class PhysicsUpdate, typename... Args>
 std::unique_ptr<EquationUpdate>
 make_equation_update(int p, Args&&... args)

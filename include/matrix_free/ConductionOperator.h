@@ -1,5 +1,5 @@
-#ifndef OPERATOR_H
-#define OPERATOR_H
+#ifndef CONDUCTION_OPERATOR_H
+#define CONDUCTION_OPERATOR_H
 
 #include <KokkosCompat_ClassicNodeAPI_Wrapper.hpp>
 #include <Kokkos_Array.hpp>

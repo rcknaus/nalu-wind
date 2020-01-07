@@ -18,6 +18,8 @@ template <int p>
 struct ConductionSolutionUpdate
 {
 public:
+  static constexpr int num_vectors =
+    ConductionLinearizedResidualOperator<p>::num_vectors;
   ConductionSolutionUpdate(
     Teuchos::ParameterList params,
     const ngp::Mesh&,

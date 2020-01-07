@@ -31,7 +31,7 @@ entity_row_view_type entity_to_row_lid_mapping(
 entity_row_view_type entity_to_row_lid_mapping(
   const ngp::Mesh&,
   const stk::mesh::Field<stk::mesh::EntityId>&,
-  const stk::mesh::Field<global_ordinal_type>&,
+  const stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&,
   const stk::mesh::Selector&);
 
 mesh_index_row_view_type row_lid_to_mesh_index_mapping(

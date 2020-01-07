@@ -17,22 +17,35 @@ namespace matrix_free {
 namespace {
 template <
   int p,
-  typename CoeffArray,
-  typename ScratchArray,
   typename FaceRankInput,
+  typename AreaArray,
+  typename ScratchArray,
   typename FaceRankOutput>
 KOKKOS_FUNCTION void
-integrate_face(
-  const CoeffArray& vandermonde,
-  ScratchArray& scratch,
+scalar_flux(
+  int index,
   const FaceRankInput& in,
+  const AreaArray& areav,
+  ScratchArray& scratch,
   FaceRankOutput& out)
 {
   for (int j = 0; j < p + 1; ++j) {
     for (int i = 0; i < p + 1; ++i) {
+      const ftype ax = areav(index, j, i, 0);
+      const ftype ay = areav(index, j, i, 1);
+      const ftype az = areav(index, j, i, 2);
+
+      out(j, i) =
+        in(index, j, i) * stk::math::sqrt(ax * ax + ay * ay + az * az);
+    }
+  }
+
+  static constexpr auto vandermonde = Coeffs<p>::W;
+  for (int j = 0; j < p + 1; ++j) {
+    for (int i = 0; i < p + 1; ++i) {
       ftype acc(0);
       for (int q = 0; q < p + 1; ++q) {
-        acc += vandermonde(i, q) * in(j, q);
+        acc += vandermonde(i, q) * out(j, q);
       }
       scratch(j, i) = acc;
     }
@@ -67,24 +80,10 @@ scalar_neumann_residual_t<p>::invoke(
   auto yout_scatter = Kokkos::Experimental::create_scatter_view(yout);
   Kokkos::parallel_for(
     "flux_residual", offsets.extent_int(0), KOKKOS_LAMBDA(int index) {
-      static constexpr auto vandermonde = Coeffs<p>::W;
-
-      LocalArray<ftype[p + 1][p + 1]> flux;
-      for (int j = 0; j < p + 1; ++j) {
-        for (int i = 0; i < p + 1; ++i) {
-          const ftype ax = areav(index, j, i, 0);
-          const ftype ay = areav(index, j, i, 1);
-          const ftype az = areav(index, j, i, 2);
-
-          flux(j, i) =
-            dqdn(index, j, i) * stk::math::sqrt(ax * ax + ay * ay + az * az);
-        }
-      }
-
       LocalArray<ftype[p + 1][p + 1]> element_rhs;
       {
         LocalArray<ftype[p + 1][p + 1]> scratch;
-        integrate_face<p>(vandermonde, scratch, flux, element_rhs);
+        scalar_flux<p>(index, dqdn, areav, scratch, element_rhs);
       }
 
       auto accessor = yout_scatter.access();

@@ -1,5 +1,5 @@
-#ifndef NEUMANN_H
-#define NEUMANN_H
+#ifndef SCALAR_FLUX_BC_H
+#define SCALAR_FLUX_BC_H
 
 #include <Tpetra_MultiVector_decl.hpp>
 

@@ -32,6 +32,17 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
+namespace {
+int
+get_num_sweeps(const Teuchos::ParameterList& pl)
+{
+  if (pl.isParameter("Number of Sweeps")) {
+    return pl.get<int>("Number of Sweeps");
+  }
+  return 1;
+}
+} // namespace
+
 template <int p>
 ConductionSolutionUpdate<p>::ConductionSolutionUpdate(
   Teuchos::ParameterList params,
@@ -57,15 +68,9 @@ ConductionSolutionUpdate<p>::ConductionSolutionUpdate(
       owned_row_map(mesh_in, stk_gid, active_in)),
     resid_op_(offsets_, exporter_),
     lin_op_(offsets_, exporter_),
-    jacobi_preconditioner_(
-      offsets_,
-      exporter_,
-      params.isParameter("Number of Sweeps")
-        ? params.get<int>("Number of Sweeps")
-        : 1),
-    linear_solver_(
-      lin_op_, ConductionLinearizedResidualOperator<p>::num_vectors, params),
-    owned_and_shared_mv_(exporter_.getSourceMap(), 1)
+    jacobi_preconditioner_(offsets_, exporter_, get_num_sweeps(params)),
+    linear_solver_(lin_op_, num_vectors, params),
+    owned_and_shared_mv_(exporter_.getSourceMap(), num_vectors)
 {
 }
 
@@ -98,6 +103,7 @@ ConductionSolutionUpdate<p>::compute_residual(
     flux_bc_offsets_, flux_bc_fields.exposed_areas, flux_bc_fields.flux);
   resid_op_.compute(linear_solver_.rhs());
 }
+
 namespace {
 
 void
@@ -115,6 +121,7 @@ copy_tpetra_solution_vector_to_stk_field(
 }
 
 } // namespace
+
 template <int p>
 void
 ConductionSolutionUpdate<p>::compute_delta(

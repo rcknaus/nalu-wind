@@ -1,10 +1,15 @@
-#ifndef COEFFICIENTS_H
-#define COEFFICIENTS_H
+#ifndef CVFEM_COEFFICIENTS_H
+#define CVFEM_COEFFICIENTS_H
 
 #include <cmath>
 
 #include "matrix_free/LocalArray.h"
 
+// An option to use a symmetric version of
+// the P=2 CVFEM operator.  This loses one to two orders
+// of accuracy and is (likely) not possible for p>=4
+// but allows use of CG and streamlines analysis
+// of the method
 #ifndef USE_SYMMETRIC
 #define USE_SYMMETRIC 0
 #endif

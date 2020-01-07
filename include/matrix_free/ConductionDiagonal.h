@@ -1,5 +1,5 @@
-#ifndef DIAGONAL_H
-#define DIAGONAL_H
+#ifndef CONDUCTION_DIAGONAL_H
+#define CONDUCTION_DIAGONAL_H
 
 #include <Tpetra_MultiVector_decl.hpp>
 #include <Tpetra_Operator.hpp>

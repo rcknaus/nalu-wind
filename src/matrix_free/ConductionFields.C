@@ -14,6 +14,8 @@
 #include "stk_ngp/NgpFieldManager.hpp"
 #include "stk_topology/topology.hpp"
 
+#include <stdexcept>
+
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
@@ -47,6 +49,12 @@ conduction_field_ordinals(const stk::mesh::MetaData& meta)
     stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateNP1);
   cf[conduction_info::TEMPERATURE_NP0] =
     stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateN);
+
+  ThrowRequireMsg(
+    meta.get_field(stk::topology::NODE_RANK, conduction_info::q_name)
+      ->field_state(stk::mesh::StateNM1),
+    "Ony BDF2 is supported with matrix free");
+
   cf[conduction_info::TEMPERATURE_NM1] =
     stk_ordinal(meta, conduction_info::q_name, stk::mesh::StateNM1);
   cf[conduction_info::ALPHA] =

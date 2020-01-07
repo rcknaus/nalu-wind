@@ -61,7 +61,8 @@ entity_row_view_type
 entity_to_row_lid_mapping(
   const ngp::Mesh& mesh,
   const stk::mesh::Field<stk::mesh::EntityId>& stk_gid_field,
-  const stk::mesh::Field<global_ordinal_type>& tpetra_gid_field,
+  const stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
+    tpetra_gid_field,
   const stk::mesh::Selector& active)
 {
   return entity_to_row_lid_mapping(

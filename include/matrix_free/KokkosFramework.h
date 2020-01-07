@@ -61,7 +61,6 @@ struct ExecTraits<Kokkos::Cuda>
 };
 #endif
 
-using global_ordinal_type = Tpetra::Details::DefaultTypes::global_ordinal_type;
 using ftype = typename ExecTraits<exec_space>::data_type;
 static constexpr int simd_len = ExecTraits<exec_space>::simd_len;
 static constexpr int alignment = ExecTraits<exec_space>::alignment;
