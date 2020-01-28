@@ -3,19 +3,14 @@
 #include "matrix_free/ConductionSolutionUpdate.h"
 #include "matrix_free/KokkosFramework.h"
 
-#include <Teuchos_ParameterList.hpp>
-#include <limits>
-#include <stk_mesh/base/FieldState.hpp>
-#include <stk_mesh/base/Types.hpp>
-
-#include "Teuchos_RCP.hpp"
-#include "Tpetra_Map.hpp"
-#include "Tpetra_MultiVector.hpp"
-#include "Tpetra_Operator.hpp"
-
+#include "stk_mesh/base/FieldState.hpp"
+#include "stk_mesh/base/Types.hpp"
 #include "stk_mesh/base/MetaData.hpp"
-
 #include "stk_ngp/NgpProfilingBlock.hpp"
+
+#include "Teuchos_ParameterList.hpp"
+
+#include <limits>
 
 namespace sierra {
 namespace nalu {

@@ -31,6 +31,15 @@ simd_node_map(const ngp::Mesh& mesh, const stk::mesh::Selector& active)
     "node_mesh_index_map",
     num_simd_elements(mesh, stk::topology::NODE_RANK, active));
 
+  auto fill_valid_nodes =  KOKKOS_LAMBDA(int simd_node_index, int simd_index, stk::mesh::Entity ent) {
+    node_indices(simd_node_index, simd_index) = mesh.fast_mesh_index(ent);
+  };
+
+  auto fill_remainder = KOKKOS_LAMBDA(int simd_node_index, int simd_index, stk::mesh::Entity) {
+    node_indices(simd_node_index, simd_index) = stk::mesh::FastMeshIndex{
+      stk::mesh::InvalidOrdinal, stk::mesh::InvalidOrdinal};
+  };
+
   simd_traverse(
     mesh, stk::topology::NODE_RANK, active,
     KOKKOS_LAMBDA(int simd_node_index, int simd_index, stk::mesh::Entity ent) {
@@ -52,14 +61,14 @@ simd_node_offsets(
   node_offset_view node_offsets(
     "node_row_map", num_simd_elements(mesh, stk::topology::NODE_RANK, active));
 
-  simd_traverse(
-    mesh, stk::topology::NODE_RANK, active,
-    KOKKOS_LAMBDA(int simd_node_index, int ne, stk::mesh::Entity ent) {
-      node_offsets(simd_node_index, ne) = elid(ent.local_offset());
-    },
-    KOKKOS_LAMBDA(int simd_node_index, int ne, stk::mesh::Entity) {
-      node_offsets(simd_node_index, ne) = -1;
-    });
+  auto fill_valid_elids = KOKKOS_LAMBDA(int simd_node_index, int ne, stk::mesh::Entity ent) {
+    node_offsets(simd_node_index, ne) = elid(ent.local_offset());
+  };
+
+  auto fill_remainder = KOKKOS_LAMBDA(int simd_node_index, int ne, stk::mesh::Entity) {
+    node_offsets(simd_node_index, ne) = invalid_offset;
+  };
+  simd_traverse(mesh, stk::topology::NODE_RANK, active, fill_valid_elids, fill_remainder);
   return node_offsets;
 }
 

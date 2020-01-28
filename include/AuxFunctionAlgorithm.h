@@ -49,6 +49,7 @@ private:
   stk::mesh::FieldBase * field_;
   AuxFunction *auxFunction_;
   stk::mesh::EntityRank entityRank_;
+  std::string name;
   
 private:
   // make this non-copyable

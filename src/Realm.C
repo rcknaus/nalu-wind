@@ -7,8 +7,6 @@
 // for more details.
 //
 
-
-
 #include <Realm.h>
 #include <Simulation.h>
 #include <NaluEnv.h>
@@ -31,6 +29,7 @@
 #include <ErrorIndicatorAlgorithmDriver.h>
 #include <FieldTypeDef.h>
 #include <LinearSystem.h>
+#include <LinearSolvers.h>
 #include <master_element/MasterElement.h>
 #include <master_element/MasterElementFactory.h>
 #include <MaterialPropertys.h>
@@ -4888,6 +4887,11 @@ int Realm::polynomial_order() const
 bool Realm::matrix_free() const
 {
   return matrixFree_;
+}
+
+Teuchos::ParameterList Realm::solver_parameters(std::string name) const
+{
+  return root()->linearSolvers_->get_solver_configuration(equationSystems_.get_solver_block_name(name));
 }
 
 } // namespace nalu

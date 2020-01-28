@@ -7,14 +7,7 @@
 #include "matrix_free/KokkosFramework.h"
 #include "matrix_free/LocalArray.h"
 
-#include <Kokkos_Atomic.hpp>
-#include <Kokkos_ExecPolicy.hpp>
-#include <Kokkos_Macros.hpp>
 #include <Kokkos_ScatterView.hpp>
-#include <stk_simd/Simd.hpp>
-
-#include "stk_util/util/ReportHandler.hpp"
-
 #include "stk_ngp/NgpProfilingBlock.hpp"
 
 namespace sierra {

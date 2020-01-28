@@ -56,16 +56,12 @@ simd_bucket_offsets(
   stk::topology::rank_t rank,
   stk::NgpVector<unsigned> buckets)
 {
-  stk::NgpVector<int> simd_lengths(buckets.size());
-  for (unsigned id = 0u; id < buckets.size(); ++id) {
-    simd_lengths[id] =
-      get_num_simd_groups(mesh.get_bucket(rank, buckets[id]).size());
-  }
   stk::NgpVector<int> simd_offset(buckets.size());
   int prev_sum = 0;
   for (unsigned k = 0u; k < buckets.size(); ++k) {
     simd_offset[k] = prev_sum;
-    prev_sum += simd_lengths[k];
+    const int bucket_length = mesh.get_bucket(rank, buckets[k]).size();
+    prev_sum += get_num_simd_groups(bucket_length);
   }
   simd_offset.copy_host_to_device();
   return simd_offset;
@@ -93,7 +89,7 @@ void
 simd_traverse(
   const ngp::Mesh& mesh,
   stk::topology::rank_t rank,
-  stk::mesh::Selector active,
+  const stk::mesh::Selector& active,
   ValidFunc func,
   RemainderFunc rem)
 {

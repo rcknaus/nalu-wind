@@ -15,6 +15,9 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
+using exec_space = ngp::ExecSpace;
+using mem_space = ngp::MemSpace;
+
 #ifndef KOKKOS_ENABLE_CUDA
 using exec_space = Kokkos::DefaultHostExecutionSpace;
 #endif

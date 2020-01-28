@@ -1,6 +1,7 @@
 #include "matrix_free/MatrixFreeSolver.h"
 #include "matrix_free/ConductionFields.h"
 #include "matrix_free/ConductionOperator.h"
+#include "matrix_free/StkEntityToRowMap.h"
 #include "matrix_free/StkSimdConnectivityMap.h"
 #include "matrix_free/StkToTpetraMap.h"
 #include "StkConductionFixture.h"

@@ -28,11 +28,11 @@ stk_ordinal(
   stk::mesh::FieldState fs = stk::mesh::StateNone)
 {
   ThrowRequireMsg(
-    meta.get_field(stk::topology::NODE_RANK, name), conduction_info::q_name);
+    meta.get_field(stk::topology::NODE_RANK, name), name);
 
   ThrowRequireMsg(
     meta.get_field(stk::topology::NODE_RANK, name)->field_state(fs),
-    std::string(conduction_info::q_name) + " has no state " +
+    std::string(name) + " has no state " +
       std::to_string((fs)));
 
   return static_cast<int>(meta.get_field(stk::topology::NODE_RANK, name)

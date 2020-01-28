@@ -83,6 +83,8 @@ private:
 SolutionPointStatus
 SolutionPointCategorizer::regular_status(stk::mesh::Entity node) const
 {
+  ngp::ProfilingBlock pf("SolutionPointCategorizer::regular_status");
+
   const stk::mesh::Bucket& b = mesh.get_bulk_on_host().bucket(node);
   const bool entity_owned = b.owned();
   const bool entity_shared = b.shared();
@@ -143,6 +145,8 @@ SolutionPointCategorizer::periodic_status(stk::mesh::Entity node) const
 SolutionPointType
 SolutionPointCategorizer::type(stk::mesh::Entity solPoint) const
 {
+  ngp::ProfilingBlock pf("SolutionPointCategorizer::type");
+
   const auto& b = mesh.get_bulk_on_host().bucket(solPoint);
   bool periodicSolPoint = false;
   for (const auto* part : b.supersets()) {
@@ -162,6 +166,8 @@ SolutionPointCategorizer::type(stk::mesh::Entity solPoint) const
 SolutionPointStatus
 SolutionPointCategorizer::status(stk::mesh::Entity e) const
 {
+  ngp::ProfilingBlock pf("SolutionPointCategorizer::status");
+
   switch (type(e)) {
   case SolutionPointType::periodic_master: {
     return periodic_status(e);
@@ -183,7 +189,8 @@ for_category(
   Categorizer cat,
   Func func)
 {
-  // TODO: NGP
+  ngp::ProfilingBlock pf("for_category");
+
   const auto& bulk = mesh.get_bulk_on_host();
   const auto buckets = bulk.get_buckets(stk::topology::NODE_RANK, active);
   for (const auto* ib : buckets) {
@@ -200,6 +207,8 @@ int
 count_category(
   const ngp::Mesh& mesh, const stk::mesh::Selector& active, Categorizer cat)
 {
+  ngp::ProfilingBlock pf("count_category");
+
   int ent_count = 0;
   for_category(
     mesh, active, cat, [&ent_count](stk::mesh::Entity) { ++ent_count; });
@@ -213,6 +222,8 @@ compute_max_owned_row_id(
   const stk::mesh::Selector& active,
   stk::mesh::PartVector periodicParts)
 {
+  ngp::ProfilingBlock pf("compute_max_owned_row_id");
+
   SolutionPointCategorizer solutionCat(mesh, gid_field, periodicParts);
   const auto num_owned_rows =
     count_category(mesh, active, [&solutionCat](stk::mesh::Entity e) {
@@ -229,6 +240,9 @@ node_entities(
   const stk::mesh::Selector& active,
   Category cat)
 {
+  ngp::ProfilingBlock pf("node_entities");
+
+
   std::vector<stk::mesh::Entity> ents;
   ents.reserve(count_category(mesh, active, cat));
   for_category(
@@ -257,6 +271,7 @@ owned_row_map(
   const stk::mesh::Selector& active,
   stk::mesh::PartVector periodic_parts)
 {
+  ngp::ProfilingBlock pf("owned_row_map");
   return make_rcp<map_type>(
     Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
     compute_max_owned_row_id(mesh, gid_field, active, periodic_parts), 1,
@@ -270,6 +285,7 @@ get_global_min_index(
   const stk::mesh::Selector& active,
   stk::mesh::PartVector periodicParts)
 {
+  ngp::ProfilingBlock pf("get_global_min_index");
   return owned_row_map(mesh, gid_field, active, periodicParts)
     ->getMinGlobalIndex();
 }
@@ -290,8 +306,7 @@ fill_id_fields(
   for (const auto* ib :
        mesh.get_bulk_on_host().get_buckets(stk::topology::NODE_RANK, active)) {
     for (const auto e : *ib) {
-      *stk::mesh::field_data(stk_gid_field, e) =
-        mesh.get_bulk_on_host().identifier(e);
+      *stk::mesh::field_data(stk_gid_field, e) = mesh.identifier(e);
     }
   }
 
@@ -314,21 +329,32 @@ fill_tpetra_id_field(
   stk::mesh::Field<typename map_type::global_ordinal_type>& tpetra_gid_field,
   stk::mesh::PartVector periodicParts)
 {
+  ngp::ProfilingBlock pf("fill_tpetra_id_field");
+
   SolutionPointCategorizer solutionCat(mesh, stk_gid_field, periodicParts);
   auto owned_category = [&solutionCat](stk::mesh::Entity entity) {
     return solutionCat.owned(entity);
   };
 
-  const auto owned_ents =
-    node_entities(mesh, stk_gid_field, active, owned_category);
-  const auto gmin =
-    get_global_min_index(mesh, stk_gid_field, active, periodicParts);
-  int g_offset = 0;
-  for (auto e : owned_ents) {
-    *stk::mesh::field_data(tpetra_gid_field, e) = gmin + g_offset;
-    ++g_offset;
+  {
+    ngp::ProfilingBlock pf_inner("fill_owned_node_entities");
+    const auto owned_ents =
+        node_entities(mesh, stk_gid_field, active, owned_category);
+
+    const auto gmin =
+        get_global_min_index(mesh, stk_gid_field, active, periodicParts);
+
+    int g_offset = 0;
+    for (auto e : owned_ents) {
+      *stk::mesh::field_data(tpetra_gid_field, e) = gmin + g_offset;
+      ++g_offset;
+    }
+
+    {
+      ngp::ProfilingBlock pf_inner_inner("copy owned to shared");
+      stk::mesh::copy_owned_to_shared(mesh.get_bulk_on_host(), {&tpetra_gid_field});
+    }
   }
-  stk::mesh::copy_owned_to_shared(mesh.get_bulk_on_host(), {&tpetra_gid_field});
 }
 
 Teuchos::RCP<const map_type>
@@ -340,6 +366,8 @@ owned_and_shared_row_map(
   const stk::mesh::Selector& active,
   stk::mesh::PartVector periodicParts)
 {
+  ngp::ProfilingBlock("owned_and_shared_row_map");
+
   SolutionPointCategorizer solution_cat(mesh, stk_gid_field, periodicParts);
 
   std::vector<typename map_type::global_ordinal_type> row_ids;
@@ -377,6 +405,8 @@ global_to_local_id_map(
   const stk::mesh::Selector& active,
   stk::mesh::PartVector periodicParts)
 {
+  ngp::ProfilingBlock("global_to_local_id_map");
+
   SolutionPointCategorizer solutionCat(mesh, stk_gid_field, periodicParts);
 
   std::unordered_map<stk::mesh::EntityId, int> g2l;

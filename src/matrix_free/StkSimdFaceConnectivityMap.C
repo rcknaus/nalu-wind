@@ -30,25 +30,26 @@ face_node_map_t<p>::invoke(
     "face_mesh_index_map",
     num_simd_elements(mesh, stk::topology::FACE_RANK, active));
 
-  simd_traverse(
-    mesh, stk::topology::FACE_RANK, active,
-    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent) {
-      const auto nodes =
-        mesh.get_nodes(stk::topology::FACE_RANK, mesh.fast_mesh_index(ent));
-      for (int j = 0; j < p + 1; ++j) {
-        for (int i = 0; i < p + 1; ++i) {
-          face_indices(simd_elem_index, j, i, simd_index) =
-            mesh.fast_mesh_index(nodes[map(j, i)]);
-        }
+  auto fill_face_connectivity = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent) {
+    const auto nodes =
+      mesh.get_nodes(stk::topology::FACE_RANK, mesh.fast_mesh_index(ent));
+    for (int j = 0; j < p + 1; ++j) {
+      for (int i = 0; i < p + 1; ++i) {
+        face_indices(simd_elem_index, j, i, simd_index) =
+          mesh.fast_mesh_index(nodes[map(j, i)]);
       }
-    },
-    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity) {
-      for (int j = 0; j < p + 1; ++j) {
-        for (int i = 0; i < p + 1; ++i) {
-          face_indices(simd_elem_index, j, i, simd_index) = invalid_mesh_index;
-        }
+    }
+  };
+
+  auto fill_invalid = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity) {
+    for (int j = 0; j < p + 1; ++j) {
+      for (int i = 0; i < p + 1; ++i) {
+        face_indices(simd_elem_index, j, i, simd_index) = invalid_mesh_index;
       }
-    });
+    }
+  };
+
+  simd_traverse(mesh, stk::topology::FACE_RANK, active, fill_face_connectivity, fill_invalid);
   return face_indices;
 }
 INSTANTIATE_POLYSTRUCT(face_node_map_t);

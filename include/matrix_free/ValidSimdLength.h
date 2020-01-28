@@ -6,9 +6,24 @@
 
 #include "matrix_free/KokkosFramework.h"
 
+#include "stk_mesh/base/Types.hpp"
+
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
+
+static constexpr int invalid_offset = -1;
+
+constexpr stk::mesh::FastMeshIndex invalid_mesh_index =
+    stk::mesh::FastMeshIndex{stk::mesh::InvalidOrdinal,
+  stk::mesh::InvalidOrdinal};
+KOKKOS_INLINE_FUNCTION bool
+valid_mesh_index(stk::mesh::FastMeshIndex index)
+{
+  return !(
+      index.bucket_id == invalid_mesh_index.bucket_id ||
+      index.bucket_ord == invalid_mesh_index.bucket_ord);
+}
 
 namespace impl {
 template <int p, int len>
