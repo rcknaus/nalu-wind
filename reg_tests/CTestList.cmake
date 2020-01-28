@@ -156,7 +156,7 @@ if(NOT ENABLE_CUDA)
   add_test_r_np(periodic3dEdge 4)
   add_test_r_np(periodic3dEdge 8)
   add_test_r(quad9HC 2)
-  add_test_r(steadyTaylorVortex 1)
+  add_test_r_cat(steadyTaylorVortex 4 6)
   add_test_r(variableDensNonIso 2)
   add_test_r(variableDensNonUniform 2)
 
