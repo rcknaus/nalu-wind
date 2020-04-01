@@ -1,30 +1,19 @@
 #ifndef KOKKOS_FRAMEWORK_H
 #define KOKKOS_FRAMEWORK_H
 
-#include <Kokkos_Macros.hpp>
-#include <Kokkos_MemoryTraits.hpp>
-#include <stk_mesh/base/Types.hpp>
-#include <type_traits>
-
 #include "Kokkos_Core.hpp"
-#include "stk_ngp/Ngp.hpp"
+
+#include "stk_mesh/base/Ngp.hpp"
+#include "stk_mesh/base/Types.hpp"
 #include "stk_simd/Simd.hpp"
-#include "Tpetra_Details_DefaultTypes.hpp"
+
+#include <type_traits>
 
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-using exec_space = ngp::ExecSpace;
-using mem_space = ngp::MemSpace;
-
-#ifndef KOKKOS_ENABLE_CUDA
-using exec_space = Kokkos::DefaultHostExecutionSpace;
-#endif
-
-#ifdef KOKKOS_ENABLE_CUDA
-using exec_space = ngp::ExecSpace;
-#endif
+using exec_space = Kokkos::DefaultExecutionSpace;
 
 #ifndef USE_STK_SIMD_NONE
 template <typename ExecSpace>
@@ -36,6 +25,8 @@ struct ExecTraits
   using layout = Kokkos::LayoutRight;
   static constexpr int alignment = alignof(data_type);
   static constexpr int simd_len = stk::simd::ndoubles;
+  static constexpr bool force_atomic =
+    std::is_same<exec_space, Kokkos::Serial>::value;
 };
 #else
 template <typename ExecSpace>
@@ -47,6 +38,8 @@ struct ExecTraits
   using layout = Kokkos::LayoutRight;
   static constexpr int alignment = alignof(double);
   static constexpr int simd_len = 1;
+  static constexpr bool force_atomic =
+    std::is_same<exec_space, Kokkos::Serial>::value;
 };
 #endif
 
@@ -57,14 +50,16 @@ struct ExecTraits<Kokkos::Cuda>
   using data_type = double;
   using memory_traits =
     Kokkos::MemoryTraits<Kokkos::Restrict | Kokkos::Aligned>;
-  using memory_space = ngp::MemSpace;
+  using memory_space = typename Kokkos::Cuda::memory_space;
   using layout = Kokkos::LayoutLeft;
-  static constexpr int alignment = KOKKOS_MEMORY_ALIGNMENT;
+  static constexpr int alignment = 32;
   static constexpr int simd_len = 1;
+  static constexpr bool force_atomic = true;
 };
 #endif
 
 using ftype = typename ExecTraits<exec_space>::data_type;
+static constexpr bool force_atomic = ExecTraits<exec_space>::force_atomic;
 static constexpr int simd_len = ExecTraits<exec_space>::simd_len;
 static constexpr int alignment = ExecTraits<exec_space>::alignment;
 

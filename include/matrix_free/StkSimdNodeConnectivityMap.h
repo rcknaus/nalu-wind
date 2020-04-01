@@ -12,7 +12,7 @@
 #include "Kokkos_Core.hpp"
 
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 
 namespace stk {
 namespace mesh {
@@ -26,9 +26,11 @@ namespace nalu {
 namespace matrix_free {
 
 node_mesh_index_view
-simd_node_map(const ngp::Mesh&, const stk::mesh::Selector&);
+simd_node_map(const stk::mesh::NgpMesh&, const stk::mesh::Selector&);
 node_offset_view simd_node_offsets(
-  const ngp::Mesh&, const stk::mesh::Selector&, ra_entity_row_view_type);
+  const stk::mesh::NgpMesh&,
+  const stk::mesh::Selector&,
+  ra_entity_row_view_type);
 
 } // namespace matrix_free
 } // namespace nalu

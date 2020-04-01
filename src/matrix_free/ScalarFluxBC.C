@@ -8,8 +8,10 @@
 #include "Kokkos_ScatterView.hpp"
 #include "Kokkos_Macros.hpp"
 #include "Teuchos_RCP.hpp"
-#include "stk_simd/Simd.hpp"
 #include "Tpetra_Operator.hpp"
+
+#include "stk_mesh/base/NgpProfilingBlock.hpp"
+#include "stk_simd/Simd.hpp"
 
 namespace sierra {
 namespace nalu {
@@ -76,7 +78,7 @@ scalar_neumann_residual_t<p>::invoke(
   const_face_vector_view<p> areav,
   tpetra_view_type yout)
 {
-  ngp::ProfilingBlock pf("scalar_neumann_residual");
+  stk::mesh::ProfilingBlock pf("scalar_neumann_residual");
   auto yout_scatter = Kokkos::Experimental::create_scatter_view(yout);
   Kokkos::parallel_for(
     "flux_residual", offsets.extent_int(0), KOKKOS_LAMBDA(int index) {

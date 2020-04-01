@@ -1,22 +1,7 @@
-#include <Kokkos_Macros.hpp>
-#include <Kokkos_Parallel.hpp>
-#include <Kokkos_View.hpp>
-#include <numeric>
-#include <stk_io/IossBridge.hpp>
-#include <stk_mesh/base/Bucket.hpp>
-#include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/FieldState.hpp>
-#include <stk_mesh/base/FieldTraits.hpp>
-#include <stk_mesh/base/Types.hpp>
-#include <stk_ngp/Ngp.hpp>
-#include <stk_ngp/NgpFieldManager.hpp>
-#include <stk_simd/Simd.hpp>
-#include <stk_util/util/ReportHandler.hpp>
-#include <string>
-#include <vector>
 
 #include "matrix_free/ConductionFields.h"
 #include "matrix_free/StkSimdConnectivityMap.h"
+
 #include "gtest/gtest.h"
 #include "mpi.h"
 #include "stk_mesh/base/BulkData.hpp"
@@ -29,6 +14,9 @@
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
 #include "stk_topology/topology.hpp"
+#include "stk_io/IossBridge.hpp"
+
+#include <numeric>
 
 namespace sierra {
 namespace nalu {
@@ -131,26 +119,20 @@ protected:
         *stk::mesh::field_data(lambda_field, node) = 1.0;
       }
     }
-
-    mesh = ngp::Mesh(bulk);
-    fm = ngp::FieldManager(bulk);
+    mesh = bulk.get_updated_ngp_mesh();
   }
   stk::mesh::MetaData meta;
   stk::mesh::BulkData bulk;
   stk::mesh::Field<double>& q_field;
   stk::mesh::Field<double>& alpha_field;
   stk::mesh::Field<double>& lambda_field;
-  ngp::Mesh mesh;
-  ngp::FieldManager fm;
+  stk::mesh::NgpMesh mesh;
 };
 
 TEST_F(ConductionFieldsFixture, gather)
 {
-  const auto ordinals = conduction_field_ordinals(meta);
-  const auto coordinal = meta.coordinate_field()->mesh_meta_data_ordinal();
   const auto conn = stk_connectivity_map<order>(mesh, meta.universal_part());
-  auto fields =
-    gather_required_conduction_fields<order>(conn, fm, coordinal, ordinals);
+  auto fields = gather_required_conduction_fields<order>(meta, conn);
   const auto qp1_h = Kokkos::create_mirror_view(fields.qp1);
   Kokkos::deep_copy(qp1_h, fields.qp1);
 

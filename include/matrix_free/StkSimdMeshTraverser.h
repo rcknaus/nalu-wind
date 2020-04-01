@@ -10,7 +10,7 @@
 #include "matrix_free/PolynomialOrders.h"
 #include "matrix_free/KokkosFramework.h"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
 
 namespace stk {
 namespace mesh {
@@ -50,18 +50,37 @@ get_length_of_next_simd_group(int index, int length)
   return nextLength;
 }
 
+inline int
+num_simd_elements(
+  const stk::mesh::NgpMesh& mesh,
+  stk::topology::rank_t rank,
+  const stk::mesh::Selector& selector)
+{
+  const auto buckets = mesh.get_bucket_ids(rank, selector);
+  int mesh_index = 0;
+  for (unsigned id = 0u; id < buckets.size(); ++id) {
+    mesh_index +=
+      get_num_simd_groups(mesh.get_bucket(rank, buckets[id]).size());
+  }
+  return mesh_index;
+}
+
 inline stk::NgpVector<int>
 simd_bucket_offsets(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   stk::topology::rank_t rank,
   stk::NgpVector<unsigned> buckets)
 {
+  stk::NgpVector<int> simd_lengths(buckets.size());
+  for (unsigned id = 0u; id < buckets.size(); ++id) {
+    simd_lengths[id] =
+      get_num_simd_groups(mesh.get_bucket(rank, buckets[id]).size());
+  }
   stk::NgpVector<int> simd_offset(buckets.size());
   int prev_sum = 0;
   for (unsigned k = 0u; k < buckets.size(); ++k) {
     simd_offset[k] = prev_sum;
-    const int bucket_length = mesh.get_bucket(rank, buckets[k]).size();
-    prev_sum += get_num_simd_groups(bucket_length);
+    prev_sum += simd_lengths[k];
   }
   simd_offset.copy_host_to_device();
   return simd_offset;
@@ -71,7 +90,7 @@ simd_bucket_offsets(
 
 inline int
 num_simd_elements(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   stk::topology::rank_t rank,
   const stk::mesh::Selector& selector)
 {
@@ -87,7 +106,7 @@ num_simd_elements(
 template <typename ValidFunc, typename RemainderFunc>
 void
 simd_traverse(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   stk::topology::rank_t rank,
   const stk::mesh::Selector& active,
   ValidFunc func,
@@ -96,10 +115,9 @@ simd_traverse(
   auto buckets = mesh.get_bucket_ids(rank, active);
   const auto bucket_offsets = impl::simd_bucket_offsets(mesh, rank, buckets);
   Kokkos::parallel_for(
-    Kokkos::TeamPolicy<exec_space, ngp::ScheduleType>(
-      buckets.size(), Kokkos::AUTO),
-    KOKKOS_LAMBDA(const typename Kokkos::TeamPolicy<
-                  exec_space, ngp::ScheduleType>::member_type& team) {
+    Kokkos::TeamPolicy<exec_space>(buckets.size(), Kokkos::AUTO),
+    KOKKOS_LAMBDA(
+      const typename Kokkos::TeamPolicy<exec_space>::member_type& team) {
       const auto bucket_id = buckets.device_get(team.league_rank());
       const auto& b = mesh.get_bucket(rank, bucket_id);
       const auto bucket_len = b.size();

@@ -1,25 +1,15 @@
 #include "matrix_free/StkToTpetraMap.h"
-#include "StkConductionFixture.h"
-
-#include <Teuchos_RCP.hpp>
-#include <Teuchos_RCPDecl.hpp>
-#include <Tpetra_Map_decl.hpp>
-#include <iosfwd>
-#include <numeric>
-#include <stk_mesh/base/Bucket.hpp>
-#include <stk_mesh/base/BulkData.hpp>
-#include <stk_mesh/base/FEMHelpers.hpp>
-#include <stk_mesh/base/Field.hpp>
-#include <stk_mesh/base/FieldBase.hpp>
-#include <stk_mesh/base/MetaData.hpp>
-#include <stk_mesh/base/Types.hpp>
-#include <stk_topology/topology.hpp>
-#include <vector>
+#include "matrix_free/StkToTpetraLocalIndices.h"
 
 #include "gtest/gtest.h"
+#include "Tpetra_Map_decl.hpp"
 #include "stk_io/StkMeshIoBroker.hpp"
 #include "stk_mesh/base/BulkData.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/MetaData.hpp"
+#include "stk_mesh/base/Field.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
+#include "stk_util/parallel/ParallelReduce.hpp"
 
 namespace stk {
 namespace mesh {
@@ -31,110 +21,196 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-class StkToTpetraMapFixture : public ::testing::Test
+class StkMeshFixture : public ::testing::Test
 {
 protected:
-  StkToTpetraMapFixture()
+  StkMeshFixture()
     : meta(3u),
       bulk(meta, MPI_COMM_WORLD, stk::mesh::BulkData::NO_AUTO_AURA),
-      gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
-        stk::topology::NODE_RANK, "global_ids")),
-      tpetra_gid_field(
+      gid_field_h(
         meta.declare_field<
           stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
-          stk::topology::NODE_RANK, "tpetra_global_ids"))
+          stk::topology::NODE_RANK, "global_ids"))
   {
-    stk::mesh::put_field_on_mesh(gid_field, meta.universal_part(), 1, nullptr);
-    stk::mesh::put_field_on_mesh(
-      tpetra_gid_field, meta.universal_part(), 1, nullptr);
-
+    active = meta.locally_owned_part() | meta.globally_shared_part();
+    stk::mesh::put_field_on_mesh(gid_field_h, active, 1, nullptr);
     stk::io::StkMeshIoBroker io(bulk.parallel());
-    const std::string name =
-      "generated:1x1x" + std::to_string(bulk.parallel_size());
+    const auto num_procs = std::to_string(bulk.parallel_size());
+    const auto name = "generated:1x1x" + num_procs;
     io.set_bulk_data(bulk);
     io.add_mesh_database(name, stk::io::READ_MESH);
     io.create_input_mesh();
     io.populate_bulk_data();
-
-    for (const auto* ib :
-         bulk.get_buckets(stk::topology::NODE_RANK, meta.universal_part())) {
-      for (auto node : *ib) {
-        *stk::mesh::field_data(gid_field, node) = bulk.identifier(node);
-      }
-    }
-    mesh = ngp::Mesh(bulk);
-    fill_id_fields(mesh, meta.universal_part(), gid_field, tpetra_gid_field);
+    mesh = stk::mesh::NgpMesh(bulk);
+    gid_field =
+      stk::mesh::NgpField<typename Tpetra::Map<>::global_ordinal_type>(
+        bulk, gid_field_h);
   }
-
   stk::mesh::MetaData meta;
   stk::mesh::BulkData bulk;
-  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
-  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
-    tpetra_gid_field;
-  ngp::Mesh mesh;
+  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>& gid_field_h;
+  stk::mesh::NgpField<typename Tpetra::Map<>::global_ordinal_type> gid_field;
+  stk::mesh::NgpMesh mesh;
+  stk::mesh::Selector active;
 };
 
-TEST_F(StkToTpetraMapFixture, successful_owned_map_creation)
+class GlobalIDFieldFixture : public StkMeshFixture
 {
-  EXPECT_GT(
-    owned_row_map(mesh, gid_field, meta.universal_part())
-      .get()
-      ->getMaxGlobalIndex(),
-    1);
+};
+
+TEST_F(GlobalIDFieldFixture, populate_global_ids)
+{
+  populate_global_id_field(mesh, active, gid_field);
 }
 
-TEST_F(StkToTpetraMapFixture, owned_map_has_correct_local_size)
+TEST_F(GlobalIDFieldFixture, field_global_ids_are_unique)
+{
+  populate_global_id_field(mesh, active, gid_field);
+  gid_field.sync_to_host();
+
+  std::set<typename Tpetra::Map<>::global_ordinal_type> idxs;
+  for (const auto* ib : bulk.get_buckets(stk::topology::NODE_RANK, active)) {
+    for (const auto node : *ib) {
+      auto it = idxs.insert(*stk::mesh::field_data(gid_field_h, node));
+      ASSERT_TRUE(it.second);
+    }
+  }
+}
+
+TEST_F(GlobalIDFieldFixture, global_id_field_has_correct_number_of_unique_ids)
+{
+  populate_global_id_field(mesh, active, gid_field);
+  gid_field.sync_to_host();
+
+  std::set<typename Tpetra::Map<>::global_ordinal_type> idxs;
+  for (const auto* ib : bulk.get_buckets(stk::topology::NODE_RANK, active)) {
+    for (const auto node : *ib) {
+      idxs.insert(*stk::mesh::field_data(gid_field_h, node));
+    }
+  }
+  ASSERT_EQ(idxs.size(), 8u);
+}
+
+TEST_F(GlobalIDFieldFixture, global_id_field_has_correct_maximum)
+{
+  populate_global_id_field(mesh, active, gid_field);
+  gid_field.sync_to_host();
+
+  typename Tpetra::Map<>::global_ordinal_type local_max_id = -1;
+  for (const auto* ib : bulk.get_buckets(stk::topology::NODE_RANK, active)) {
+    for (const auto node : *ib) {
+      local_max_id =
+        std::max(local_max_id, *stk::mesh::field_data(gid_field_h, node));
+    }
+  }
+
+  typename Tpetra::Map<>::global_ordinal_type global_max_id = -1;
+  stk::all_reduce_max(bulk.parallel(), &local_max_id, &global_max_id, 1u);
+
+  ASSERT_EQ(global_max_id, 8 + (bulk.parallel_size() - 1) * 4);
+}
+
+class MapFixture : public StkMeshFixture
+{
+protected:
+  MapFixture() : StkMeshFixture()
+  {
+    populate_global_id_field(mesh, active, gid_field);
+  }
+};
+
+TEST_F(MapFixture, successful_owned_map_creation)
+{
+  ASSERT_NO_THROW(make_owned_row_map(mesh, active));
+}
+
+TEST_F(MapFixture, successful_owned_and_shared_map_creation)
+{
+  ASSERT_NO_THROW(make_owned_and_shared_row_map(mesh, active, gid_field));
+}
+
+TEST_F(MapFixture, owned_map_size)
+{
+  const unsigned num_elements = 8 + (bulk.parallel_size() - 1) * 4;
+  ASSERT_EQ(
+    make_owned_row_map(mesh, active).getGlobalNumElements(), num_elements);
+}
+
+TEST_F(MapFixture, owned_map_has_correct_local_size)
 {
   // this test relies on STKs node sharing policy of lowest rank winning.  If
   // that ever changes, this will fail
-  if (bulk.parallel_size() > 2)
-    return;
-  const unsigned expected_local_size =
-    (bulk.parallel_rank() % 2 == 0) ? 8u : 4u;
-  EXPECT_EQ(
-    owned_row_map(mesh, gid_field, meta.universal_part())->getNodeNumElements(),
-    expected_local_size);
+  const auto asserted_local_size = (bulk.parallel_rank() == 0) ? 8u : 4u;
+  ASSERT_EQ(
+    make_owned_row_map(mesh, active).getNodeNumElements(), asserted_local_size);
 }
 
-TEST_F(StkToTpetraMapFixture, owned_map_has_correct_global_size)
-{
-  const size_t expected_global_size = 8 + (bulk.parallel_size() - 1) * 4;
-  EXPECT_EQ(
-    owned_row_map(mesh, gid_field, meta.universal_part())
-      ->getGlobalNumElements(),
-    expected_global_size);
-}
-
-TEST_F(StkToTpetraMapFixture, successful_owned_and_shared_map_creation)
-{
-  const auto shared_map = owned_and_shared_row_map(
-    mesh, gid_field, tpetra_gid_field, meta.universal_part());
-  EXPECT_TRUE(shared_map.get() != nullptr);
-}
-
-TEST_F(StkToTpetraMapFixture, correct_owned_and_shared_local_index_sum)
-{
-  const auto oas_map = owned_and_shared_row_map(
-    mesh, gid_field, tpetra_gid_field, meta.universal_part());
-  EXPECT_EQ(oas_map->getNodeNumElements(), 8u);
-}
-
-TEST_F(StkToTpetraMapFixture, owned_and_shared_is_just_owned_in_serial)
+TEST_F(MapFixture, owned_and_shared_is_just_owned_in_serial)
 {
   if (bulk.parallel_size() != 1) {
     return;
   }
-  const auto owned_map = owned_row_map(mesh, gid_field, meta.universal_part());
-  const auto oas_map = owned_and_shared_row_map(
-    mesh, gid_field, tpetra_gid_field, meta.universal_part());
-  EXPECT_EQ(oas_map->getNodeNumElements(), owned_map->getNodeNumElements());
+
+  const auto owned_map = make_owned_row_map(mesh, active);
+  const auto oas_map = make_owned_and_shared_row_map(mesh, active, gid_field);
+  ASSERT_EQ(oas_map.getGlobalNumElements(), owned_map.getGlobalNumElements());
 }
-TEST_F(StkToTpetraMapFixture, owned_and_shared_globally_is_whole_shattered_mesh)
+
+TEST_F(MapFixture, owned_and_shared_globally_is_whole_shattered_mesh)
 {
-  const size_t expected_global_size = bulk.parallel_size() * 8;
-  const auto oas_map = owned_and_shared_row_map(
-    mesh, gid_field, tpetra_gid_field, meta.universal_part());
-  EXPECT_EQ(oas_map->getGlobalNumElements(), expected_global_size);
+  const size_t ASSERTed_global_size = bulk.parallel_size() * 8;
+  const auto oas_map = make_owned_and_shared_row_map(mesh, active, gid_field);
+  ASSERT_EQ(oas_map.getGlobalNumElements(), ASSERTed_global_size);
+}
+
+class EntityLidFixture : public MapFixture
+{
+protected:
+  EntityLidFixture()
+    : MapFixture(),
+      oas_map(make_owned_and_shared_row_map(mesh, active, gid_field))
+  {
+  }
+  Tpetra::Map<> oas_map;
+};
+
+TEST_F(EntityLidFixture, stk_lid_to_tpetra_lid_construction)
+{
+  ASSERT_NO_THROW(make_stk_lid_to_tpetra_lid_map(
+    mesh, active, gid_field, oas_map.getLocalMap()));
+}
+
+TEST_F(EntityLidFixture, all_active_stk_entities_have_a_valid_tpetra_lid)
+{
+  const auto elid = make_stk_lid_to_tpetra_lid_map(
+    mesh, active, gid_field, oas_map.getLocalMap());
+
+  const auto invalid = Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid();
+
+  auto elid_h = Kokkos::create_mirror_view(elid);
+  Kokkos::deep_copy(elid_h, elid);
+  for (const auto* ib : bulk.get_buckets(stk::topology::NODE_RANK, active)) {
+    for (const auto node : *ib) {
+      ASSERT_NE(elid(node.local_offset()), invalid);
+    }
+  }
+}
+
+TEST_F(EntityLidFixture, all_active_stk_entities_have_a_unique_tpetra_lid)
+{
+  const auto elid = make_stk_lid_to_tpetra_lid_map(
+    mesh, active, gid_field, oas_map.getLocalMap());
+
+  auto elid_h = Kokkos::create_mirror_view(elid);
+  Kokkos::deep_copy(elid_h, elid);
+
+  std::set<typename Tpetra::Map<>::local_ordinal_type> lids;
+  for (const auto* ib : bulk.get_buckets(stk::topology::NODE_RANK, active)) {
+    for (const auto node : *ib) {
+      auto it = lids.insert(elid(node.local_offset()));
+      ASSERT_TRUE(it.second);
+    }
+  }
 }
 
 } // namespace matrix_free

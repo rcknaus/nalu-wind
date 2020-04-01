@@ -10,7 +10,7 @@
 #include "matrix_free/KokkosFramework.h"
 #include "stk_mesh/base/CoordinateSystems.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 #include "stk_ngp/NgpFieldManager.hpp"
 
 namespace stk {
@@ -29,7 +29,7 @@ struct stk_simd_scalar_field_gather_t
 {
   static void invoke(
     const_elem_mesh_index_view<p> connectivity,
-    const ngp::ConstField<double>& field,
+    const stk::mesh::NgpConstField<double>& field,
     scalar_view<p> simd_element_field);
 };
 } // namespace impl
@@ -41,7 +41,7 @@ struct stk_simd_vector_field_gather_t
 {
   static void invoke(
     const_elem_mesh_index_view<p> connectivity,
-    const ngp::ConstField<double>& field,
+    const stk::mesh::NgpConstField<double>& field,
     vector_view<p> simd_element_field);
 };
 } // namespace impl
@@ -53,7 +53,7 @@ struct stk_simd_face_scalar_field_gather_t
 {
   static void invoke(
     const_face_mesh_index_view<p> connectivity,
-    const ngp::ConstField<double>& field,
+    const stk::mesh::NgpConstField<double>& field,
     face_scalar_view<p> simd_element_field);
 };
 } // namespace impl
@@ -65,14 +65,16 @@ struct stk_simd_face_vector_field_gather_t
 {
   static void invoke(
     const_face_mesh_index_view<p> connectivity,
-    const ngp::ConstField<double>& field,
+    const stk::mesh::NgpConstField<double>& field,
     face_vector_view<p> simd_element_field);
 };
 } // namespace impl
 P_INVOKEABLE(stk_simd_face_vector_field_gather)
 
 void stk_simd_scalar_node_gather(
-  const_node_mesh_index_view, const ngp::ConstField<double>&, node_scalar_view);
+  const_node_mesh_index_view,
+  const stk::mesh::NgpConstField<double>&,
+  node_scalar_view);
 
 } // namespace matrix_free
 } // namespace nalu

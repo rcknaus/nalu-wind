@@ -11,7 +11,7 @@
 #include "Tpetra_MultiVector.hpp"
 
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/NgpFieldManager.hpp"
+#include "stk_mesh/base/GetNgpField.hpp"
 
 namespace stk {
 namespace mesh {
@@ -23,7 +23,21 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-struct BCFields
+template <typename T = double>
+stk::mesh::NgpField<T>&
+get_ngp_field(
+  const stk::mesh::MetaData& meta,
+  std::string name,
+  stk::mesh::FieldState state = stk::mesh::StateNP1)
+{
+  ThrowAssert(meta.get_field(stk::topology::NODE_RANK, name));
+  ThrowAssert(
+    meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+  return stk::mesh::get_updated_ngp_field<T>(
+    *meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+}
+
+struct BCDirichletFields
 {
   node_scalar_view qp1;
   node_scalar_view qbc;
@@ -37,51 +51,40 @@ struct BCFluxFields
 };
 
 template <int p>
-struct ResidualFields
+struct BCFields
 {
-  static constexpr int num_fields = conduction_info::num_physics_fields;
+  BCDirichletFields dirichlet_fields;
+  BCFluxFields<p> flux_fields;
+};
+
+template <int p>
+struct InteriorResidualFields
+{
   scalar_view<p> qm1;
   scalar_view<p> qp0;
   scalar_view<p> qp1;
   scalar_view<p> volume_metric;
   scs_vector_view<p> diffusion_metric;
-
-  int coordinate_ordinal{-1};
-  Kokkos::Array<int, num_fields> ordinals;
 };
 
-Kokkos::Array<int, conduction_info::num_physics_fields>
-conduction_field_ordinals(const stk::mesh::MetaData&);
-Kokkos::Array<int, conduction_info::num_coefficient_fields>
-conduction_coefficient_ordinals(const stk::mesh::MetaData&);
-int dirichlet_bc_ordinal(const stk::mesh::MetaData&);
-int flux_bc_ordinal(const stk::mesh::MetaData&);
+template <int p>
+struct LinearizedResidualFields
+{
+  scalar_view<p> volume_metric;
+  scs_vector_view<p> diffusion_metric;
+};
 
 namespace impl {
 
 template <int p>
 struct gather_required_conduction_fields_t
 {
-  static ResidualFields<p> invoke(
-    const_elem_mesh_index_view<p>,
-    const ngp::FieldManager&,
-    int,
-    Kokkos::Array<int, conduction_info::num_physics_fields>);
+  static InteriorResidualFields<p>
+  invoke(const stk::mesh::MetaData&, const_elem_mesh_index_view<p>);
 };
 
 } // namespace impl
 P_INVOKEABLE(gather_required_conduction_fields)
-
-template <int p>
-struct LinearizedResidualFields
-{
-  static constexpr int num_fields = conduction_info::num_coefficient_fields;
-  scalar_view<p> volume_metric;
-  scs_vector_view<p> diffusion_metric;
-
-  int coordinate_ordinal{-1};
-  Kokkos::Array<int, num_fields> ordinals;
-};
 
 } // namespace matrix_free
 } // namespace nalu

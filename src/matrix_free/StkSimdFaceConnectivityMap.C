@@ -23,14 +23,16 @@ namespace impl {
 template <int p>
 face_mesh_index_view<p>
 face_node_map_t<p>::invoke(
-  const ngp::Mesh& mesh, const stk::mesh::Selector& active)
+  const stk::mesh::NgpMesh& mesh, const stk::mesh::Selector& active)
 {
   constexpr auto map = StkFaceNodeMapping<p>::map;
   face_mesh_index_view<p> face_indices(
     "face_mesh_index_map",
     num_simd_elements(mesh, stk::topology::FACE_RANK, active));
 
-  auto fill_face_connectivity = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent) {
+  auto fill_face_connectivity =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent)
+  {
     const auto nodes =
       mesh.get_nodes(stk::topology::FACE_RANK, mesh.fast_mesh_index(ent));
     for (int j = 0; j < p + 1; ++j) {
@@ -41,7 +43,9 @@ face_node_map_t<p>::invoke(
     }
   };
 
-  auto fill_invalid = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity) {
+  auto fill_invalid =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity)
+  {
     for (int j = 0; j < p + 1; ++j) {
       for (int i = 0; i < p + 1; ++i) {
         face_indices(simd_elem_index, j, i, simd_index) = invalid_mesh_index;
@@ -49,7 +53,9 @@ face_node_map_t<p>::invoke(
     }
   };
 
-  simd_traverse(mesh, stk::topology::FACE_RANK, active, fill_face_connectivity, fill_invalid);
+  simd_traverse(
+    mesh, stk::topology::FACE_RANK, active, fill_face_connectivity,
+    fill_invalid);
   return face_indices;
 }
 INSTANTIATE_POLYSTRUCT(face_node_map_t);
@@ -57,7 +63,7 @@ INSTANTIATE_POLYSTRUCT(face_node_map_t);
 template <int p>
 face_offset_view<p>
 face_offsets_t<p>::invoke(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   const stk::mesh::Selector& active,
   ra_entity_row_view_type elid)
 {

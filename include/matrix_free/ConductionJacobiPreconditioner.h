@@ -33,7 +33,7 @@ public:
     double alpha = 1.0,
     double beta = 0.0) const final;
 
-  void set_dirichlet_nodes(node_offset_view dirichlet_offsets_in)
+  void set_dirichlet_nodes(const_node_offset_view dirichlet_offsets_in)
   {
     dirichlet_bc_active_ = dirichlet_offsets_in.extent_int(0) > 0;
     dirichlet_bc_offsets_ = dirichlet_offsets_in;
@@ -60,14 +60,14 @@ public:
 
 private:
   const const_elem_offset_view<p> elem_offsets_;
-  const export_type exporter_;
+  const export_type& exporter_;
   const int num_sweeps_;
   mv_type owned_diagonal_;
   mv_type owned_and_shared_diagonal_;
   mutable mv_type cached_mv_;
 
   bool dirichlet_bc_active_{false};
-  node_offset_view dirichlet_bc_offsets_;
+  const_node_offset_view dirichlet_bc_offsets_;
   LinearizedResidualFields<p> fields_;
   double gamma_{+1};
 

@@ -5,7 +5,7 @@
 #include <Teuchos_ParameterList.hpp>
 #include <memory>
 #include <stk_mesh/base/Selector.hpp>
-#include <stk_ngp/Ngp.hpp>
+#include <stk_mesh/base/Ngp.hpp>
 #include <stk_ngp/NgpFieldManager.hpp>
 #include <stk_ngp/NgpForEachEntity.hpp>
 #include <stk_topology/topology.hpp>
@@ -39,14 +39,16 @@ constexpr int kz = 4;
 
 void
 field_add(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   const stk::mesh::Selector& active,
-  const ngp::ConstField<double>& x,
-  ngp::Field<double>& y)
+  const stk::mesh::NgpConstField<double>& x,
+  stk::mesh::NgpField<double>& y)
 {
   ngp::for_each_entity_run(
     mesh, stk::topology::NODE_RANK, active,
-    KOKKOS_LAMBDA(ngp::Mesh::MeshIndex mi) { y.get(mi, 0) += x.get(mi, 0); });
+    KOKKOS_LAMBDA(stk::mesh::NgpMesh::MeshIndex mi) {
+      y.get(mi, 0) += x.get(mi, 0);
+    });
   y.modify_on_device();
 }
 
@@ -74,20 +76,11 @@ protected:
     : ConductionFixture(nx, scale),
       update(make_equation_update<ConductionUpdate>(
         order,
-        meta,
-        mesh,
-        fm,
+        bulk,
         Teuchos::ParameterList{},
         meta.universal_part(),
         stk::mesh::Selector{},
-        stk::mesh::Selector{})),
-      qm1_ordinal(
-        q_field.field_of_state(stk::mesh::StateNM1).mesh_meta_data_ordinal()),
-      qp0_ordinal(
-        q_field.field_of_state(stk::mesh::StateN).mesh_meta_data_ordinal()),
-      qp1_ordinal(
-        q_field.field_of_state(stk::mesh::StateNP1).mesh_meta_data_ordinal()),
-      delta_ordinal(qtmp_field.mesh_meta_data_ordinal())
+        stk::mesh::Selector{}))
   {
     auto& coordField = coordinate_field();
     for (auto ib :
@@ -120,10 +113,12 @@ protected:
     Kokkos::Array<double, 3> gammas = {{+1 / dt, -1 / dt, 0}};
     update->initialize();
     update->compute_preconditioner(gammas[0]);
-    update->compute_update(gammas, fm.get_field<double>(delta_ordinal));
+    update->compute_update(
+      gammas, get_ngp_field(meta, conduction_info::qtmp_name));
     field_add(
-      mesh, meta.universal_part(), fm.get_field<double>(delta_ordinal),
-      fm.get_field<double>(qp1_ordinal));
+      mesh, meta.universal_part(),
+      get_ngp_field(meta, conduction_info::qtmp_name),
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
     update->update_solution_fields();
     time += dt;
 
@@ -131,19 +126,25 @@ protected:
     update->compute_preconditioner(gammas[0]);
     while (time < final_time - dt / 2) {
       bulk.update_field_data_states();
-      fm.get_field<double>(qm1_ordinal).swap(fm.get_field<double>(qp0_ordinal));
-      fm.get_field<double>(qp0_ordinal).swap(fm.get_field<double>(qp1_ordinal));
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNM1)
+        .swap(get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateN));
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateN)
+        .swap(
+          get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
       update->swap_states();
       update->predict_state();
 
-      update->compute_update(gammas, fm.get_field<double>(delta_ordinal));
+      update->compute_update(
+        gammas, get_ngp_field(meta, conduction_info::qtmp_name));
       field_add(
-        mesh, meta.universal_part(), fm.get_field<double>(delta_ordinal),
-        fm.get_field<double>(qp1_ordinal));
+        mesh, meta.universal_part(),
+        get_ngp_field(meta, conduction_info::qtmp_name),
+        get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
       update->update_solution_fields();
       time += dt;
     }
-    fm.get_field<double>(qp1_ordinal).sync_to_host();
+    get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1)
+      .sync_to_host();
     return time;
   }
 
@@ -180,10 +181,6 @@ protected:
   }
 
   std::unique_ptr<EquationUpdate> update;
-  int qm1_ordinal{-1};
-  int qp0_ordinal{-1};
-  int qp1_ordinal{-1};
-  int delta_ordinal{-1};
 };
 
 TEST_F(ConductionSimulationFixture, heat_conduction_reduces_peak_value)
@@ -208,20 +205,11 @@ protected:
     : ConductionFixtureP2(nx / order, scale),
       update(make_equation_update<ConductionUpdate>(
         order,
-        meta,
-        mesh,
-        fm,
+        bulk,
         Teuchos::ParameterList{},
         meta.universal_part(),
         stk::mesh::Selector{},
-        stk::mesh::Selector{})),
-      qm1_ordinal(
-        q_field.field_of_state(stk::mesh::StateNM1).mesh_meta_data_ordinal()),
-      qp0_ordinal(
-        q_field.field_of_state(stk::mesh::StateN).mesh_meta_data_ordinal()),
-      qp1_ordinal(
-        q_field.field_of_state(stk::mesh::StateNP1).mesh_meta_data_ordinal()),
-      delta_ordinal(qtmp_field.mesh_meta_data_ordinal())
+        stk::mesh::Selector{}))
   {
     auto& coordField = coordinate_field();
     for (auto ib :
@@ -284,10 +272,12 @@ protected:
     Kokkos::Array<double, 3> gammas = {{+1 / dt, -1 / dt, 0}};
     update->initialize();
     update->compute_preconditioner(gammas[0]);
-    update->compute_update(gammas, fm.get_field<double>(delta_ordinal));
+    update->compute_update(
+      gammas, get_ngp_field(meta, conduction_info::qtmp_name));
     field_add(
-      mesh, meta.universal_part(), fm.get_field<double>(delta_ordinal),
-      fm.get_field<double>(qp1_ordinal));
+      mesh, meta.universal_part(),
+      get_ngp_field(meta, conduction_info::qtmp_name),
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
     update->update_solution_fields();
     time += dt;
 
@@ -295,27 +285,29 @@ protected:
     update->compute_preconditioner(gammas[0]);
     while (time < final_time - dt / 2) {
       bulk.update_field_data_states();
-      fm.get_field<double>(qm1_ordinal).swap(fm.get_field<double>(qp0_ordinal));
-      fm.get_field<double>(qp0_ordinal).swap(fm.get_field<double>(qp1_ordinal));
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNM1)
+        .swap(get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateN));
+      get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateN)
+        .swap(
+          get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
       update->swap_states();
       update->predict_state();
 
-      update->compute_update(gammas, fm.get_field<double>(delta_ordinal));
+      update->compute_update(
+        gammas, get_ngp_field(meta, conduction_info::qtmp_name));
       field_add(
-        mesh, meta.universal_part(), fm.get_field<double>(delta_ordinal),
-        fm.get_field<double>(qp1_ordinal));
+        mesh, meta.universal_part(),
+        get_ngp_field(meta, conduction_info::qtmp_name),
+        get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1));
       update->update_solution_fields();
       time += dt;
     }
-    fm.get_field<double>(qp1_ordinal).sync_to_host();
+    get_ngp_field(meta, conduction_info::q_name, stk::mesh::StateNP1)
+      .sync_to_host();
     return time;
   }
 
   std::unique_ptr<EquationUpdate> update;
-  int qm1_ordinal{-1};
-  int qp0_ordinal{-1};
-  int qp1_ordinal{-1};
-  int delta_ordinal{-1};
 };
 
 TEST_F(

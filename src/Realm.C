@@ -10,6 +10,7 @@
 #include <Realm.h>
 #include <Simulation.h>
 #include <NaluEnv.h>
+#include <stk_mesh/base/GetNgpField.hpp>
 
 // percept
 #if defined (NALU_USES_PERCEPT)
@@ -108,6 +109,8 @@
 #include "ngp_utils/NgpFieldBLAS.h"
 #include "ngp_algorithms/GeometryAlgDriver.h"
 #include "ngp_algorithms/GeometryInteriorAlg.h"
+
+
 #include "ngp_algorithms/GeometryBoundaryAlg.h"
 
 // stk_util
@@ -129,6 +132,8 @@
 #include <stk_mesh/base/CreateEdges.hpp>
 #include <stk_mesh/base/SkinBoundary.hpp>
 #include <stk_mesh/base/FieldBLAS.hpp>
+#include <stk_mesh/base/GetNgpField.hpp>
+
 
 // stk_io
 #include <stk_io/StkMeshIoBroker.hpp>
@@ -3223,10 +3228,10 @@ Realm::provide_output()
         for (auto& stringFieldPair : promotionIO_->get_output_fields()) {
           auto& field = *stringFieldPair.second;
           if (field.type_is<double>()) {
-            ngp_field_manager().get_field<double>(field.mesh_meta_data_ordinal()).sync_to_host();
+            stk::mesh::get_updated_ngp_field<double>(field).sync_to_host();
           }
           else if (field.type_is<int>()) {
-            ngp_field_manager().get_field<int>(field.mesh_meta_data_ordinal()).sync_to_host();
+            stk::mesh::get_updated_ngp_field<int>(field).sync_to_host();
           }
         }
         promotionIO_->write_database_data(currentTime);
@@ -3323,6 +3328,20 @@ Realm::provide_restart_output()
 
 }
 
+template <typename T = double>
+stk::mesh::NgpField<T>&
+get_ngp_field(
+  const stk::mesh::MetaData& meta,
+  std::string name,
+  stk::mesh::FieldState state = stk::mesh::StateNP1)
+{
+  ThrowAssert(meta.get_field(stk::topology::NODE_RANK, name));
+  ThrowAssert(
+    meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+  return stk::mesh::get_updated_ngp_field<T>(
+    *meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+}
+
 //--------------------------------------------------------------------------
 //-------- swap_states -----------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3331,10 +3350,7 @@ Realm::swap_states()
 {
   bulkData_->update_field_data_states();
 
-#ifdef KOKKOS_ENABLE_CUDA
   if (get_time_step_count() < 2) return;
-
-  const auto& fieldMgr = ngp_field_manager();
   for (const auto fld: metaData_->get_fields()) {
     const unsigned numStates = fld->number_of_states();
     const auto fieldID = fld->mesh_meta_data_ordinal();
@@ -3344,17 +3360,11 @@ Realm::swap_states()
     if ((numStates < 2) || (fieldID != fieldNp1ID)) continue;
 
     for (unsigned i=(numStates - 1); i > 0; --i) {
-      auto& toField = fieldMgr.get_field<double>(
-        fld->field_state(static_cast<stk::mesh::FieldState>(i))
-        ->mesh_meta_data_ordinal());
-      auto& fromField = fieldMgr.get_field<double>(
-        fld->field_state(static_cast<stk::mesh::FieldState>(i-1))
-        ->mesh_meta_data_ordinal());
-
+      auto& toField = stk::mesh::get_updated_ngp_field<double>(*fld->field_state(static_cast<stk::mesh::FieldState>(i)));
+      auto& fromField = stk::mesh::get_updated_ngp_field<double>(*fld->field_state(static_cast<stk::mesh::FieldState>(i-1)));
       toField.swap(fromField);
     }
   }
-#endif
 }
 
 //--------------------------------------------------------------------------

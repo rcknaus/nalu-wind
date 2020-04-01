@@ -24,20 +24,16 @@ namespace nalu {
 namespace matrix_free {
 namespace {
 
-using tpetra_view_type = typename Tpetra::MultiVector<>::dual_view_type::t_dev;
+using tpetra_view_type =
+  typename Tpetra::MultiVector<double, int long>::dual_view_type::t_dev;
 using const_tpetra_view_type =
-  typename Tpetra::MultiVector<>::dual_view_type::t_dev_const;
+  typename Tpetra::MultiVector<double, int long>::dual_view_type::t_dev_const;
 
 void
-reciprocal_inplace(tpetra_view_type x)
+reciprocal(tpetra_view_type x)
 {
-  // be brave
   Kokkos::parallel_for(
-    "invert", x.extent_int(0), KOKKOS_LAMBDA(int k) {
-      ThrowAssert(
-        std::abs(x(k, 0)) > 1.0e12 * std::numeric_limits<double>::min());
-      x(k, 0) = 1 / x(k, 0);
-    });
+    "invert", x.extent_int(0), KOKKOS_LAMBDA(int k) { x(k, 0) = 1 / x(k, 0); });
 }
 } // namespace
 template <int p>
@@ -48,16 +44,16 @@ JacobiOperator<p>::JacobiOperator(
   : elem_offsets_(elem_offsets_in),
     exporter_(exporter_in),
     num_sweeps_(num_sweeps_in),
-    owned_diagonal_(exporter_.getTargetMap(), num_vectors),
-    owned_and_shared_diagonal_(exporter_.getSourceMap(), num_vectors),
-    cached_mv_(exporter_.getTargetMap(), num_vectors)
+    owned_diagonal_(exporter_in.getTargetMap(), num_vectors),
+    owned_and_shared_diagonal_(exporter_in.getSourceMap(), num_vectors),
+    cached_mv_(exporter_in.getTargetMap(), num_vectors)
 {
 }
 
 template <int p>
 void
 JacobiOperator<p>::set_linear_operator(
-  Teuchos::RCP<const base_operator_type> op_in)
+  Teuchos::RCP<const Tpetra::Operator<>> op_in)
 {
   op_ = op_in;
 }
@@ -67,8 +63,6 @@ void
 element_multiply(
   const_tpetra_view_type inv_diag, const_tpetra_view_type b, tpetra_view_type y)
 {
-  ngp::ProfilingBlock pf("element_multiply");
-
   Kokkos::parallel_for(
     "element_multiply", b.extent_int(0), KOKKOS_LAMBDA(int index) {
       y(index, 0) = inv_diag(index, 0) * b(index, 0);
@@ -93,8 +87,6 @@ void
 JacobiOperator<p>::apply(
   const mv_type& x, mv_type& y, Teuchos::ETransp, double, double) const
 {
-  ngp::ProfilingBlock pf("JacobiOperator<p>::apply");
-
   element_multiply(
     owned_diagonal_.getLocalViewDevice(), x.getLocalViewDevice(),
     y.getLocalViewDevice());
@@ -105,15 +97,12 @@ JacobiOperator<p>::apply(
       x.getLocalViewDevice(), y.getLocalViewDevice());
   }
   y.modify_device();
-  exec_space().fence();
 }
 
 template <int p>
 void
 JacobiOperator<p>::compute_diagonal()
 {
-  ngp::ProfilingBlock pf("JacobiOperator<p>::compute_diagonal");
-
   owned_and_shared_diagonal_.putScalar(0.);
   conduction_diagonal<p>(
     gamma_, elem_offsets_, fields_.volume_metric, fields_.diffusion_metric,
@@ -127,9 +116,7 @@ JacobiOperator<p>::compute_diagonal()
   owned_and_shared_diagonal_.modify_device();
   owned_diagonal_.putScalar(0.);
   owned_diagonal_.doExport(owned_and_shared_diagonal_, exporter_, Tpetra::ADD);
-  reciprocal_inplace(owned_diagonal_.getLocalViewDevice());
-  owned_diagonal_.modify_device();
-  exec_space().fence();
+  reciprocal(owned_diagonal_.getLocalViewDevice());
 }
 INSTANTIATE_POLYCLASS(JacobiOperator);
 } // namespace matrix_free

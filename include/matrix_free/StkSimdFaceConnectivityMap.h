@@ -8,7 +8,7 @@
 #include "stk_mesh/base/Field.hpp"
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
 
 #include "Kokkos_Core.hpp"
 
@@ -22,7 +22,7 @@ template <int p>
 struct face_node_map_t
 {
   static face_mesh_index_view<p>
-  invoke(const ngp::Mesh&, const stk::mesh::Selector&);
+  invoke(const stk::mesh::NgpMesh&, const stk::mesh::Selector&);
 };
 } // namespace impl
 P_INVOKEABLE(face_node_map)
@@ -30,8 +30,10 @@ namespace impl {
 template <int p>
 struct face_offsets_t
 {
-  static face_offset_view<p>
-  invoke(const ngp::Mesh&, const stk::mesh::Selector&, ra_entity_row_view_type);
+  static face_offset_view<p> invoke(
+    const stk::mesh::NgpMesh&,
+    const stk::mesh::Selector&,
+    ra_entity_row_view_type);
 };
 } // namespace impl
 P_INVOKEABLE(face_offsets)

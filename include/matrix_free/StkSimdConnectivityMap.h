@@ -13,7 +13,7 @@
 #include "Kokkos_Core.hpp"
 
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 
 namespace stk {
 namespace mesh {
@@ -30,7 +30,8 @@ namespace impl {
 template <int p>
 struct stk_connectivity_map_t
 {
-  static elem_mesh_index_view<p> invoke(const ngp::Mesh&, stk::mesh::Selector);
+  static elem_mesh_index_view<p>
+  invoke(const stk::mesh::NgpMesh&, stk::mesh::Selector);
 };
 } // namespace impl
 P_INVOKEABLE(stk_connectivity_map)
@@ -39,8 +40,10 @@ namespace impl {
 template <int p>
 struct create_offset_map_t
 {
-  static elem_offset_view<p>
-  invoke(const ngp::Mesh&, const stk::mesh::Selector&, ra_entity_row_view_type);
+  static elem_offset_view<p> invoke(
+    const stk::mesh::NgpMesh&,
+    const stk::mesh::Selector&,
+    ra_entity_row_view_type);
 };
 } // namespace impl
 P_INVOKEABLE(create_offset_map)

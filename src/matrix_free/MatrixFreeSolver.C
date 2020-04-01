@@ -74,14 +74,14 @@ MatrixFreeSolver::MatrixFreeSolver(
 void
 MatrixFreeSolver::set_preconditioner(const base_op_type& prec)
 {
-  ngp::ProfilingBlock pf("MatrixFreeSolver::set_preconditioner");
+  stk::mesh::ProfilingBlock pf("MatrixFreeSolver::set_preconditioner");
   problem_.setRightPrec(Teuchos::rcpFromRef(prec));
 }
 
 void
 MatrixFreeSolver::solve()
 {
-  ngp::ProfilingBlock pf("MatrixFreeSolver::solve");
+  stk::mesh::ProfilingBlock pf("MatrixFreeSolver::solve");
   lhs_vector_.putScalar(0.);
   problem_.setProblem();
   solv_->solve();
@@ -92,7 +92,7 @@ namespace {
 double
 mv_norm2(const typename MatrixFreeSolver::mv_type& mv)
 {
-  ngp::ProfilingBlock pf("mv_norm2");
+  stk::mesh::ProfilingBlock pf("mv_norm2");
   const int num_vectors(mv.getNumVectors());
   Teuchos::Array<double> mv_norm(num_vectors);
   mv.norm2(mv_norm());
@@ -106,7 +106,7 @@ mv_norm2(const typename MatrixFreeSolver::mv_type& mv)
 double
 normalized_mv_norm2(const typename MatrixFreeSolver::mv_type& mv)
 {
-  ngp::ProfilingBlock pf("normalized_mv_norm2");
+  stk::mesh::ProfilingBlock pf("normalized_mv_norm2");
   return mv_norm2(mv) / std::sqrt(mv.getNumVectors() * mv.getGlobalLength());
 }
 } // namespace
@@ -114,7 +114,7 @@ normalized_mv_norm2(const typename MatrixFreeSolver::mv_type& mv)
 double
 MatrixFreeSolver::final_linear_norm() const
 {
-  ngp::ProfilingBlock pf("MatrixFreeSolver::final_linear_norm");
+  stk::mesh::ProfilingBlock pf("MatrixFreeSolver::final_linear_norm");
   problem_.getOperator()->apply(
     lhs_vector_, final_rhs_vector_, Teuchos::NO_TRANS, 1., 0.);
   final_rhs_vector_.update(1., rhs_vector_, -1.);
@@ -124,14 +124,14 @@ MatrixFreeSolver::final_linear_norm() const
 double
 MatrixFreeSolver::nonlinear_residual() const
 {
-  ngp::ProfilingBlock pf("MatrixFreeSolver::nonlinear_residual");
+  stk::mesh::ProfilingBlock pf("MatrixFreeSolver::nonlinear_residual");
   return normalized_mv_norm2(rhs_vector_);
 }
 
 int
 MatrixFreeSolver::num_iterations() const
 {
-  ngp::ProfilingBlock pf("MatrixFreeSolver::num_iterations");
+  stk::mesh::ProfilingBlock pf("MatrixFreeSolver::num_iterations");
   return solv_->getNumIters();
 }
 

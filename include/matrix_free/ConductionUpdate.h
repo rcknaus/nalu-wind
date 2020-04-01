@@ -5,7 +5,8 @@
 #include "matrix_free/ConductionGatheredFieldManager.h"
 #include "matrix_free/ConductionSolutionUpdate.h"
 #include "matrix_free/KokkosFramework.h"
-#include <stk_ngp/Ngp.hpp>
+#include <stk_mesh/base/BulkData.hpp>
+#include <stk_mesh/base/Ngp.hpp>
 
 namespace sierra {
 namespace nalu {
@@ -16,36 +17,31 @@ class ConductionUpdate final : public EquationUpdate
 {
 public:
   ConductionUpdate(
-    const stk::mesh::MetaData&,
-    const ngp::Mesh&,
-    const ngp::FieldManager&,
+    stk::mesh::BulkData&,
     Teuchos::ParameterList,
-    stk::mesh::Selector,
-    stk::mesh::Selector,
-    stk::mesh::Selector);
+    stk::mesh::Selector active,
+    stk::mesh::Selector dirichlet,
+    stk::mesh::Selector flux,
+    stk::mesh::Selector replicas = {});
 
   void initialize() final;
   void swap_states() final;
   void predict_state() final;
   void compute_preconditioner(double projected_dt) final;
-  void
-  compute_update(Kokkos::Array<double, 3>, ngp::Field<double>& delta) final;
+  void compute_update(
+    Kokkos::Array<double, 3>, stk::mesh::NgpField<double>& delta) final;
   void update_solution_fields() final;
   double provide_norm() const final { return residual_norm_; };
   double provide_scaled_norm() const final { return scaled_residual_norm_; }
   void banner(std::string name, std::ostream& stream) const final;
 
 private:
-  const ngp::FieldManager& fm_;
-  const ngp::Mesh& mesh_;
-  const stk::mesh::Selector active_;
+  stk::mesh::BulkData& bulk_;
+  const stk::mesh::MetaData& meta_;
+  stk::mesh::Selector active_;
 
   ConductionSolutionUpdate<p> field_update_;
   ConductionGatheredFieldManager<p> field_gather_;
-
-  int solution_field_ordinal_np1_{-1};
-  int solution_field_ordinal_np0_{-1};
-  int solution_field_ordinal_nm1_{-1};
 
   double initial_residual_{-1};
   double residual_norm_{0};

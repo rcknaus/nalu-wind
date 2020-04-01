@@ -8,7 +8,7 @@
 #include "Kokkos_Core.hpp"
 #include "matrix_free/KokkosFramework.h"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 
 #include "Tpetra_Map.hpp"
 
@@ -29,13 +29,13 @@ entity_row_view_type entity_to_row_lid_mapping(
   const std::unordered_map<stk::mesh::EntityId, int>&);
 
 entity_row_view_type entity_to_row_lid_mapping(
-  const ngp::Mesh&,
+  const stk::mesh::NgpMesh&,
   const stk::mesh::Field<stk::mesh::EntityId>&,
   const stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&,
   const stk::mesh::Selector&);
 
 mesh_index_row_view_type row_lid_to_mesh_index_mapping(
-  const ngp::Mesh&, const const_entity_row_view_type elid);
+  const stk::mesh::NgpMesh&, const const_entity_row_view_type elid);
 
 } // namespace matrix_free
 } // namespace nalu

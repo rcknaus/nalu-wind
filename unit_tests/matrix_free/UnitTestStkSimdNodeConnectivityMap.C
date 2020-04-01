@@ -1,19 +1,12 @@
-#include <mpi.h>
+#include "matrix_free/StkSimdNodeConnectivityMap.h"
+#include "matrix_free/NodeOrderMap.h"
 
 #include <Kokkos_View.hpp>
-#include <numeric>
 #include <stk_io/IossBridge.hpp>
-#include <stk_mesh/base/Bucket.hpp>
-#include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/FieldTraits.hpp>
-#include <stk_mesh/base/Types.hpp>
-#include <stk_ngp/Ngp.hpp>
-#include <stk_util/util/ReportHandler.hpp>
 #include <string>
 #include <vector>
+#include <numeric>
 
-#include "matrix_free/NodeOrderMap.h"
-#include "matrix_free/StkSimdNodeConnectivityMap.h"
 #include "gtest/gtest.h"
 #include "stk_mesh/base/BulkData.hpp"
 #include "stk_mesh/base/CoordinateSystems.hpp"
@@ -25,7 +18,8 @@
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
 #include "stk_topology/topology.hpp"
 
 namespace sierra {
@@ -35,11 +29,7 @@ namespace matrix_free {
 class SimdNodeConnectivityFixture : public ::testing::Test
 {
 protected:
-  SimdNodeConnectivityFixture()
-    : meta(3u),
-      bulk(meta, MPI_COMM_WORLD),
-      gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
-        stk::topology::NODE_RANK, "global_ids"))
+  SimdNodeConnectivityFixture() : meta(3u), bulk(meta, MPI_COMM_WORLD)
   {
     stk::topology topo(stk::topology::HEX_8);
 
@@ -61,7 +51,6 @@ protected:
     auto& coordField = meta.declare_field<vector_field_type>(
       stk::topology::NODE_RANK, "coordinates");
     stk::mesh::put_field_on_mesh(coordField, block_1, nullptr);
-    stk::mesh::put_field_on_mesh(gid_field, block_1, 1, nullptr);
     stk::mesh::put_field_on_mesh(
       coordField, stk::mesh::selectUnion(allSurfaces), nullptr);
     meta.set_coordinate_field(&coordField);
@@ -99,19 +88,11 @@ protected:
           nodeLocations.at(j).at(d);
       }
     }
-
-    for (const auto* ib :
-         bulk.get_buckets(stk::topology::NODE_RANK, meta.universal_part())) {
-      for (auto node : *ib) {
-        *stk::mesh::field_data(gid_field, node) = bulk.identifier(node);
-      }
-    }
-    mesh = ngp::Mesh(bulk);
+    mesh = stk::mesh::NgpMesh(bulk);
   }
   stk::mesh::MetaData meta;
   stk::mesh::BulkData bulk;
-  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
-  ngp::Mesh mesh;
+  stk::mesh::NgpMesh mesh;
 };
 
 TEST_F(SimdNodeConnectivityFixture, map_has_correct_outermost_index)

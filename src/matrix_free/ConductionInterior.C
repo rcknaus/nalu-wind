@@ -8,7 +8,7 @@
 #include "matrix_free/LocalArray.h"
 
 #include <Kokkos_ScatterView.hpp>
-#include "stk_ngp/NgpProfilingBlock.hpp"
+#include "stk_mesh/base/NgpProfilingBlock.hpp"
 
 namespace sierra {
 namespace nalu {
@@ -27,7 +27,7 @@ conduction_residual_t<p>::invoke(
   const_scs_vector_view<p> diffusion_metric,
   tpetra_view_type yout)
 {
-  ngp::ProfilingBlock pf("conduction_residual");
+  stk::mesh::ProfilingBlock pf("conduction_residual");
 
   auto yout_scatter = Kokkos::Experimental::create_scatter_view(yout);
   Kokkos::parallel_for(
@@ -79,7 +79,7 @@ conduction_linearized_residual_t<p>::invoke(
   ra_tpetra_view_type xin,
   tpetra_view_type yout)
 {
-  ngp::ProfilingBlock pf("conduction_linearized_residual");
+  stk::mesh::ProfilingBlock pf("conduction_linearized_residual");
 
   auto yout_scatter = Kokkos::Experimental::create_scatter_view(yout);
   Kokkos::parallel_for(

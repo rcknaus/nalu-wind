@@ -55,22 +55,27 @@ protected:
 
   SolverFixture()
     : ConductionFixture(nx, scale),
+      owned_map(make_owned_row_map(mesh, meta.universal_part())),
+      owned_and_shared_map(make_owned_and_shared_row_map(
+        mesh, meta.universal_part(), gid_field_ngp)),
+      exporter(
+        Teuchos::rcpFromRef(owned_and_shared_map),
+        Teuchos::rcpFromRef(owned_map)),
+      elid(make_stk_lid_to_tpetra_lid_map(
+        mesh,
+        meta.universal_part(),
+        gid_field_ngp,
+        owned_and_shared_map.getLocalMap())),
       conn(stk_connectivity_map<order>(mesh, meta.universal_part())),
-      elid(entity_to_row_lid_mapping(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
       offsets(create_offset_map<order>(mesh, meta.universal_part(), elid)),
-      owned_map(owned_row_map(mesh, gid_field, meta.universal_part())),
-      owned_and_shared_map(owned_and_shared_row_map(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
-      exporter(owned_and_shared_map, owned_map),
       resid_op(offsets, exporter),
       lin_op(offsets, exporter)
   {
-    auto& coordField = coordinate_field();
+    auto& coord_field = coordinate_field();
     for (auto ib :
          bulk.get_buckets(stk::topology::NODE_RANK, meta.universal_part())) {
       for (auto node : *ib) {
-        const auto* coordptr = stk::mesh::field_data(coordField, node);
+        const auto* coordptr = stk::mesh::field_data(coord_field, node);
         *stk::mesh::field_data(
           q_field.field_of_state(stk::mesh::StateNP1), node) =
           std::cos(coordptr[0]);
@@ -85,26 +90,24 @@ protected:
         *stk::mesh::field_data(lambda_field, node) = 1.0;
       }
     }
-
-    const auto coordinate_ordinal = coordinate_field().mesh_meta_data_ordinal();
-    fields = gather_required_conduction_fields<order>(
-      conn, fm, coordinate_ordinal, conduction_field_ordinals(meta));
+    fields = gather_required_conduction_fields<order>(meta, conn);
     coefficient_fields.volume_metric = fields.volume_metric;
     coefficient_fields.diffusion_metric = fields.diffusion_metric;
   }
-  const elem_mesh_index_view<order> conn;
+
+  const Tpetra::Map<> owned_map;
+  const Tpetra::Map<> owned_and_shared_map;
+  const Tpetra::Export<> exporter;
   const const_entity_row_view_type elid;
+
+  const elem_mesh_index_view<order> conn;
   const elem_offset_view<order> offsets;
   const node_offset_view dirichlet_bc_offsets{"empty_dirichlet", 0};
-  const Teuchos::RCP<const Tpetra::Map<>> owned_map;
-  const Teuchos::RCP<const Tpetra::Map<>> owned_and_shared_map;
-
-  const Tpetra::Export<> exporter;
 
   ConductionResidualOperator<order> resid_op;
   ConductionLinearizedResidualOperator<order> lin_op;
 
-  ResidualFields<order> fields;
+  InteriorResidualFields<order> fields;
   LinearizedResidualFields<order> coefficient_fields;
 };
 

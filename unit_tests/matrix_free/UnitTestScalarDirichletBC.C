@@ -38,25 +38,25 @@ class DirichletFixture : public ConductionFixture
 protected:
   DirichletFixture()
     : ConductionFixture(nx, scale),
-      stk_entity_to_tpetra_index(entity_to_row_lid_mapping(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
+      owned_map(make_owned_row_map(mesh, meta.universal_part())),
+      owned_and_shared_map(make_owned_and_shared_row_map(
+        mesh, meta.universal_part(), gid_field_ngp)),
+      exporter(
+        Teuchos::rcpFromRef(owned_and_shared_map),
+        Teuchos::rcpFromRef(owned_map)),
+      owned_lhs(Teuchos::rcpFromRef(owned_map), 1),
+      owned_rhs(Teuchos::rcpFromRef(owned_map), 1),
+      owned_and_shared_lhs(Teuchos::rcpFromRef(owned_and_shared_map), 1),
+      owned_and_shared_rhs(Teuchos::rcpFromRef(owned_and_shared_map), 1),
+      elid(make_stk_lid_to_tpetra_lid_map(
+        mesh,
+        meta.universal_part(),
+        gid_field_ngp,
+        owned_and_shared_map.getLocalMap())),
       dirichlet_nodes(simd_node_map(
         mesh, meta.get_topology_root_part(stk::topology::QUAD_4))),
       dirichlet_offsets(simd_node_offsets(
-        mesh,
-        meta.get_topology_root_part(stk::topology::QUAD_4),
-        stk_entity_to_tpetra_index)),
-      owned_map(owned_row_map(mesh, gid_field, meta.universal_part())),
-      shared_map(owned_and_shared_row_map(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
-      exporter(shared_map, owned_map),
-      coordinate_ordinal(coordinate_field().mesh_meta_data_ordinal()),
-      bc_ordinal(dirichlet_bc_ordinal(meta)),
-      residual_ordinals(conduction_field_ordinals(meta)),
-      owned_lhs(owned_map, 1),
-      owned_rhs(owned_map, 1),
-      shared_lhs(shared_map, 1),
-      shared_rhs(shared_map, 1)
+        mesh, meta.get_topology_root_part(stk::topology::QUAD_4), elid))
   {
     owned_lhs.putScalar(0.);
     owned_rhs.putScalar(0.);
@@ -70,46 +70,42 @@ protected:
       }
     }
   }
+
   static constexpr int nx = 4;
   static constexpr double scale = M_PI;
-  const const_entity_row_view_type stk_entity_to_tpetra_index;
-  const const_node_mesh_index_view dirichlet_nodes;
-  const const_node_offset_view dirichlet_offsets;
-  Teuchos::RCP<const Tpetra::Map<>> owned_map;
-  Teuchos::RCP<const Tpetra::Map<>> shared_map;
-  Tpetra::Export<> exporter;
 
-  int coordinate_ordinal{-1};
-  int bc_ordinal{-1};
-  Kokkos::Array<int, conduction_info::num_physics_fields> residual_ordinals;
-
+  const Tpetra::Map<> owned_map;
+  const Tpetra::Map<> owned_and_shared_map;
+  const Tpetra::Export<> exporter;
   Tpetra::MultiVector<> owned_lhs;
   Tpetra::MultiVector<> owned_rhs;
+  Tpetra::MultiVector<> owned_and_shared_lhs;
+  Tpetra::MultiVector<> owned_and_shared_rhs;
 
-  Tpetra::MultiVector<> shared_lhs;
-  Tpetra::MultiVector<> shared_rhs;
+  const const_entity_row_view_type elid;
+  const const_node_mesh_index_view dirichlet_nodes;
+  const const_node_offset_view dirichlet_offsets;
 };
 
 TEST_F(DirichletFixture, bc_residual)
 {
   auto qp1 = node_scalar_view("qp1_at_bc", dirichlet_nodes.extent_int(0));
   stk_simd_scalar_node_gather(
-    dirichlet_nodes,
-    fm.get_field<double>(residual_ordinals[conduction_info::TEMPERATURE_NP1]),
-    qp1);
+    dirichlet_nodes, get_ngp_field<double>(meta, conduction_info::q_name), qp1);
 
   auto qbc =
     node_scalar_view("qspecified_at_bc", dirichlet_nodes.extent_int(0));
   stk_simd_scalar_node_gather(
-    dirichlet_nodes, fm.get_field<double>(bc_ordinal), qbc);
+    dirichlet_nodes, get_ngp_field<double>(meta, conduction_info::qbc_name),
+    qbc);
 
-  shared_rhs.putScalar(0.);
+  owned_and_shared_rhs.putScalar(0.);
   scalar_dirichlet_residual(
     dirichlet_offsets, qp1, qbc, owned_rhs.getLocalLength(),
-    shared_rhs.getLocalViewDevice());
-  shared_rhs.modify_device();
+    owned_and_shared_rhs.getLocalViewDevice());
+  owned_and_shared_rhs.modify_device();
   owned_rhs.putScalar(0.);
-  owned_rhs.doExport(shared_rhs, exporter, Tpetra::ADD);
+  owned_rhs.doExport(owned_and_shared_rhs, exporter, Tpetra::ADD);
 
   owned_rhs.sync_host();
   auto view_h = owned_rhs.getLocalViewHost();
@@ -126,15 +122,16 @@ TEST_F(DirichletFixture, linearized_bc_residual)
   constexpr double some_val = 85432.2;
   owned_lhs.putScalar(some_val);
 
-  shared_lhs.doImport(owned_lhs, exporter, Tpetra::INSERT);
+  owned_and_shared_lhs.doImport(owned_lhs, exporter, Tpetra::INSERT);
 
   scalar_dirichlet_linearized(
     dirichlet_offsets, owned_lhs.getLocalLength(),
-    shared_lhs.getLocalViewDevice(), shared_rhs.getLocalViewDevice());
+    owned_and_shared_lhs.getLocalViewDevice(),
+    owned_and_shared_rhs.getLocalViewDevice());
 
-  shared_rhs.modify_device();
+  owned_and_shared_rhs.modify_device();
   owned_rhs.putScalar(0.);
-  owned_rhs.doExport(shared_rhs, exporter, Tpetra::ADD);
+  owned_rhs.doExport(owned_and_shared_rhs, exporter, Tpetra::ADD);
 
   owned_rhs.sync_host();
   auto view_h = owned_rhs.getLocalViewHost();

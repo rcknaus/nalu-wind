@@ -18,7 +18,7 @@
 #include <Teuchos_RCPDecl.hpp>
 #include <Tpetra_MultiVector_decl.hpp>
 #include <mpi.h>
-#include "stk_ngp/NgpProfilingBlock.hpp"
+#include "stk_mesh/base/NgpProfilingBlock.hpp"
 
 #include "Teuchos_RCP.hpp"
 #include "Tpetra_Export.hpp"
@@ -32,45 +32,45 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-namespace {
-int
-get_num_sweeps(const Teuchos::ParameterList& pl)
+template <int p>
+ConductionOffsetViews<p>::ConductionOffsetViews(
+  const stk::mesh::NgpMesh& mesh,
+  Kokkos::View<const typename Tpetra::Map<>::local_ordinal_type*> elids,
+  const stk::mesh::Selector& active,
+  stk::mesh::Selector dirichlet,
+  stk::mesh::Selector flux)
+  : offsets(create_offset_map<p>(mesh, active, elids)),
+    dirichlet_bc_offsets(simd_node_offsets(mesh, dirichlet, elids)),
+    flux_bc_offsets(face_offsets<p>(mesh, flux, elids))
 {
-  if (pl.isParameter("Number of Sweeps")) {
-    return pl.get<int>("Number of Sweeps");
-  }
-  return 1;
 }
-} // namespace
+INSTANTIATE_POLYSTRUCT(ConductionOffsetViews);
 
 template <int p>
 ConductionSolutionUpdate<p>::ConductionSolutionUpdate(
   Teuchos::ParameterList params,
-  const ngp::Mesh& mesh_in,
-  const stk::mesh::Field<stk::mesh::EntityId>& stk_gid,
-  const stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
-    tpetra_gid,
+  const stk::mesh::NgpMesh& mesh_in,
+  stk::mesh::NgpConstField<typename Tpetra::Map<>::global_ordinal_type> gid,
   stk::mesh::Selector active_in,
-  stk::mesh::Selector dirichlet,
-  stk::mesh::Selector flux)
-  : stk_entity_to_tpetra_index_(
-      entity_to_row_lid_mapping(mesh_in, stk_gid, tpetra_gid, active_in)),
-    tpetra_index_to_stk_mesh_index_(
-      row_lid_to_mesh_index_mapping(mesh_in, stk_entity_to_tpetra_index_)),
-    offsets_(
-      create_offset_map<p>(mesh_in, active_in, stk_entity_to_tpetra_index_)),
-    dirichlet_bc_offsets_(
-      simd_node_offsets(mesh_in, dirichlet, stk_entity_to_tpetra_index_)),
-    flux_bc_offsets_(
-      face_offsets<p>(mesh_in, flux, stk_entity_to_tpetra_index_)),
+  stk::mesh::Selector dirichlet_in,
+  stk::mesh::Selector flux_in,
+  stk::mesh::Selector replicas_in)
+  : linsys_(mesh_in, active_in, gid, replicas_in),
+    offset_views_(
+      mesh_in, linsys_.stk_lid_to_tpetra_lid, active_in, dirichlet_in, flux_in),
     exporter_(
-      owned_and_shared_row_map(mesh_in, stk_gid, tpetra_gid, active_in),
-      owned_row_map(mesh_in, stk_gid, active_in)),
-    resid_op_(offsets_, exporter_),
-    lin_op_(offsets_, exporter_),
-    jacobi_preconditioner_(offsets_, exporter_, get_num_sweeps(params)),
-    linear_solver_(lin_op_, num_vectors, params),
-    owned_and_shared_mv_(exporter_.getSourceMap(), num_vectors)
+      Teuchos::rcpFromRef(linsys_.owned_and_shared),
+      Teuchos::rcpFromRef(linsys_.owned)),
+    resid_op_(offset_views_.offsets, exporter_),
+    lin_op_(offset_views_.offsets, exporter_),
+    jacobi_preconditioner_(
+      offset_views_.offsets,
+      exporter_,
+      params.isParameter("Number of Sweeps")
+        ? params.get<int>("Number of Sweeps")
+        : 1),
+    linear_solver_(lin_op_, 1, params),
+    owned_and_shared_mv_(exporter_.getSourceMap(), 1)
 {
 }
 
@@ -79,9 +79,11 @@ void
 ConductionSolutionUpdate<p>::compute_preconditioner(
   double gamma, LinearizedResidualFields<p> coeffs)
 {
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::compute_preconditioner");
+  stk::mesh::ProfilingBlock pf(
+    "ConductionSolutionUpdate<p>::compute_preconditioner");
   linear_solver_.set_preconditioner(jacobi_preconditioner_);
-  jacobi_preconditioner_.set_dirichlet_nodes(dirichlet_bc_offsets_);
+  jacobi_preconditioner_.set_dirichlet_nodes(
+    offset_views_.dirichlet_bc_offsets);
   jacobi_preconditioner_.set_coefficients(gamma, coeffs);
   jacobi_preconditioner_.compute_diagonal();
   jacobi_preconditioner_.set_linear_operator(Teuchos::rcpFromRef(lin_op_));
@@ -91,28 +93,28 @@ template <int p>
 void
 ConductionSolutionUpdate<p>::compute_residual(
   Kokkos::Array<double, 3> gammas,
-  ResidualFields<p> fields,
-  BCFields dirichlet_bc_fields,
+  InteriorResidualFields<p> fields,
+  BCDirichletFields dirichlet_bc_fields,
   BCFluxFields<p> flux_bc_fields)
 {
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::compute_residual");
+  stk::mesh::ProfilingBlock pf("ConductionSolutionUpdate<p>::compute_residual");
   resid_op_.set_fields(gammas, fields);
   resid_op_.set_bc_fields(
-    dirichlet_bc_offsets_, dirichlet_bc_fields.qp1, dirichlet_bc_fields.qbc);
+    offset_views_.dirichlet_bc_offsets, dirichlet_bc_fields.qp1,
+    dirichlet_bc_fields.qbc);
   resid_op_.set_flux_fields(
-    flux_bc_offsets_, flux_bc_fields.exposed_areas, flux_bc_fields.flux);
+    offset_views_.flux_bc_offsets, flux_bc_fields.exposed_areas,
+    flux_bc_fields.flux);
   resid_op_.compute(linear_solver_.rhs());
 }
-
 namespace {
 
 void
 copy_tpetra_solution_vector_to_stk_field(
   const_mesh_index_row_view_type lide,
   const typename Tpetra::MultiVector<>::dual_view_type::t_dev delta_view,
-  ngp::Field<double>& delta_stk_field)
+  stk::mesh::NgpField<double>& delta_stk_field)
 {
-  ngp::ProfilingBlock pf("copy_tpetra_solution_vector_to_stk_field");
   Kokkos::parallel_for(
     delta_view.extent_int(0), KOKKOS_LAMBDA(int k) {
       delta_stk_field.get(lide(k), 0) = delta_view(k, 0);
@@ -121,47 +123,47 @@ copy_tpetra_solution_vector_to_stk_field(
 }
 
 } // namespace
-
 template <int p>
 void
 ConductionSolutionUpdate<p>::compute_delta(
-  double gamma, LinearizedResidualFields<p> coeffs, ngp::Field<double>& delta)
+  double gamma,
+  LinearizedResidualFields<p> coeffs,
+  stk::mesh::NgpField<double>& delta)
 {
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::compute_delta");
-
+  stk::mesh::ProfilingBlock pf("ConductionSolutionUpdate<p>::compute_delta");
+  lin_op_.set_dirichlet_nodes(offset_views_.dirichlet_bc_offsets);
   lin_op_.set_coefficients(gamma, coeffs);
-  lin_op_.set_dirichlet_nodes(dirichlet_bc_offsets_);
   linear_solver_.solve();
-  owned_and_shared_mv_.doImport(
-    linear_solver_.lhs(), exporter_, Tpetra::INSERT);
-  copy_tpetra_solution_vector_to_stk_field(
-    tpetra_index_to_stk_mesh_index_, owned_and_shared_mv_.getLocalViewDevice(),
-    delta);
-  exec_space().fence();
+  if (exporter_.getTargetMap()->isDistributed()) {
+    owned_and_shared_mv_.doImport(
+      linear_solver_.lhs(), exporter_, Tpetra::INSERT);
+    copy_tpetra_solution_vector_to_stk_field(
+      linsys_.tpetra_lid_to_stk_lid, owned_and_shared_mv_.getLocalViewDevice(),
+      delta);
+  } else {
+    copy_tpetra_solution_vector_to_stk_field(
+      linsys_.tpetra_lid_to_stk_lid, linear_solver_.lhs().getLocalViewDevice(),
+      delta);
+  }
 }
 
 template <int p>
 double
 ConductionSolutionUpdate<p>::residual_norm() const
 {
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::residual_norm");
   return linear_solver_.nonlinear_residual();
 }
-
-template <int p>
-double
-ConductionSolutionUpdate<p>::final_linear_norm() const
-{
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::final_linear_norm");
-  return linear_solver_.final_linear_norm();
-}
-
 template <int p>
 int
 ConductionSolutionUpdate<p>::num_iterations() const
 {
-  ngp::ProfilingBlock pf("ConductionSolutionUpdate<p>::num_iterations");
   return linear_solver_.num_iterations();
+}
+template <int p>
+double
+matrix_free::ConductionSolutionUpdate<p>::final_linear_norm() const
+{
+  return linear_solver_.final_linear_norm();
 }
 
 INSTANTIATE_POLYSTRUCT(ConductionSolutionUpdate);

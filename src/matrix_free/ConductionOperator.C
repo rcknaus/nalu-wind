@@ -7,9 +7,8 @@
 #include "matrix_free/PolynomialOrders.h"
 #include "matrix_free/KokkosFramework.h"
 
-#include <mpi.h>
-#include <Teuchos_RCP.hpp>
 #include "Tpetra_Operator.hpp"
+#include "stk_mesh/base/NgpProfilingBlock.hpp"
 
 namespace sierra {
 namespace nalu {
@@ -20,7 +19,7 @@ ConductionResidualOperator<p>::ConductionResidualOperator(
   const_elem_offset_view<p> elem_offsets_in, const export_type& exporter_in)
   : elem_offsets_(elem_offsets_in),
     exporter_(exporter_in),
-    cached_rhs_(exporter_in.getSourceMap(), num_vectors)
+    cached_shared_rhs_(exporter_in.getSourceMap(), num_vectors)
 {
 }
 
@@ -28,32 +27,54 @@ template <int p>
 void
 ConductionResidualOperator<p>::compute(mv_type& owned_rhs)
 {
-  ngp::ProfilingBlock pf("ConductiondResidualOperator<p>::compute");
+  stk::mesh::ProfilingBlock pf("ConductionResidualOperator<p>::apply");
+  if (exporter_.getTargetMap()->isDistributed()) {
 
-  cached_rhs_.putScalar(0.);
-  conduction_residual<p>(
-    gammas_, elem_offsets_, residual_fields_.qm1, residual_fields_.qp0,
-    residual_fields_.qp1, residual_fields_.volume_metric,
-    residual_fields_.diffusion_metric, cached_rhs_.getLocalViewDevice());
+    cached_shared_rhs_.putScalar(0.);
+    conduction_residual<p>(
+      gammas_, elem_offsets_, residual_fields_.qm1, residual_fields_.qp0,
+      residual_fields_.qp1, residual_fields_.volume_metric,
+      residual_fields_.diffusion_metric,
+      cached_shared_rhs_.getLocalViewDevice());
 
-  if (flux_bc_active_) {
-    scalar_neumann_residual<p>(
-      flux_bc_offsets_, flux_, exposed_areas_,
-      cached_rhs_.getLocalViewDevice());
+    if (flux_bc_active_) {
+      scalar_neumann_residual<p>(
+        flux_bc_offsets_, flux_, exposed_areas_,
+        cached_shared_rhs_.getLocalViewDevice());
+    }
+
+    if (dirichlet_bc_active_) {
+      scalar_dirichlet_residual(
+        dirichlet_bc_offsets_, bc_nodal_solution_field_,
+        bc_nodal_specified_field_, owned_rhs.getLocalLength(),
+        cached_shared_rhs_.getLocalViewDevice());
+    }
+
+    cached_shared_rhs_.modify_device();
+    owned_rhs.putScalar(0.);
+    owned_rhs.modify_device();
+    owned_rhs.doExport(cached_shared_rhs_, exporter_, Tpetra::ADD);
+  } else {
+    owned_rhs.putScalar(0.);
+    conduction_residual<p>(
+      gammas_, elem_offsets_, residual_fields_.qm1, residual_fields_.qp0,
+      residual_fields_.qp1, residual_fields_.volume_metric,
+      residual_fields_.diffusion_metric, owned_rhs.getLocalViewDevice());
+
+    if (flux_bc_active_) {
+      scalar_neumann_residual<p>(
+        flux_bc_offsets_, flux_, exposed_areas_,
+        owned_rhs.getLocalViewDevice());
+    }
+
+    if (dirichlet_bc_active_) {
+      scalar_dirichlet_residual(
+        dirichlet_bc_offsets_, bc_nodal_solution_field_,
+        bc_nodal_specified_field_, owned_rhs.getLocalLength(),
+        owned_rhs.getLocalViewDevice());
+    }
+    owned_rhs.modify_device();
   }
-
-  if (dirichlet_bc_active_) {
-    scalar_dirichlet_residual(
-      dirichlet_bc_offsets_, bc_nodal_solution_field_,
-      bc_nodal_specified_field_, owned_rhs.getLocalLength(),
-      cached_rhs_.getLocalViewDevice());
-  }
-
-  cached_rhs_.modify_device();
-  owned_rhs.putScalar(0.);
-  owned_rhs.modify_device();
-  owned_rhs.doExport(cached_rhs_, exporter_, Tpetra::ADD);
-  exec_space().fence();
 }
 INSTANTIATE_POLYCLASS(ConductionResidualOperator);
 
@@ -62,8 +83,8 @@ ConductionLinearizedResidualOperator<p>::ConductionLinearizedResidualOperator(
   const_elem_offset_view<p> elem_offsets_in, const export_type& exporter_in)
   : elem_offsets_(elem_offsets_in),
     exporter_(exporter_in),
-    cached_sln_(exporter_.getSourceMap(), num_vectors),
-    cached_rhs_(exporter_.getSourceMap(), num_vectors)
+    cached_sln_(exporter_in.getSourceMap(), num_vectors),
+    cached_rhs_(exporter_in.getSourceMap(), num_vectors)
 {
 }
 
@@ -76,33 +97,44 @@ ConductionLinearizedResidualOperator<p>::apply(
   double alpha,
   double beta) const
 {
-  ngp::ProfilingBlock pf("ConductionLinearizedResidualOperator<p>::apply");
-
+  stk::mesh::ProfilingBlock pf("LinearizedResidualOperator<p>::apply");
   ThrowRequire(trans == Teuchos::NO_TRANS);
   ThrowRequire(alpha == 1.0);
   ThrowRequire(beta == 0.0);
+  if (exporter_.getTargetMap()->isDistributed()) {
+    cached_sln_.doImport(owned_sln, exporter_, Tpetra::INSERT);
+    cached_rhs_.putScalar(0.);
 
-  cached_sln_.doImport(owned_sln, exporter_, Tpetra::INSERT);
-
-  cached_rhs_.putScalar(0.);
-  conduction_linearized_residual<p>(
-    gamma_, elem_offsets_, fields_.volume_metric, fields_.diffusion_metric,
-    cached_sln_.getLocalViewDevice(), cached_rhs_.getLocalViewDevice());
-
-  if (dirichlet_bc_active_) {
-    scalar_dirichlet_linearized(
-      dirichlet_bc_offsets_, owned_rhs.getLocalLength(),
+    conduction_linearized_residual<p>(
+      gamma_, elem_offsets_, fields_.volume_metric, fields_.diffusion_metric,
       cached_sln_.getLocalViewDevice(), cached_rhs_.getLocalViewDevice());
-  }
 
-  cached_rhs_.modify_device();
-  owned_rhs.putScalar(0.);
-  owned_rhs.modify_device();
-  owned_rhs.doExport(cached_rhs_, exporter_, Tpetra::ADD);
-  exec_space().fence();
+    if (dirichlet_bc_active_) {
+      scalar_dirichlet_linearized(
+        dirichlet_bc_offsets_, owned_rhs.getLocalLength(),
+        cached_sln_.getLocalViewDevice(), cached_rhs_.getLocalViewDevice());
+    }
+
+    cached_rhs_.modify_device();
+    owned_rhs.putScalar(0.);
+    owned_rhs.modify_device();
+    exec_space().fence();
+    owned_rhs.doExport(cached_rhs_, exporter_, Tpetra::ADD);
+  } else {
+    owned_rhs.putScalar(0.);
+    conduction_linearized_residual<p>(
+      gamma_, elem_offsets_, fields_.volume_metric, fields_.diffusion_metric,
+      owned_sln.getLocalViewDevice(), owned_rhs.getLocalViewDevice());
+
+    if (dirichlet_bc_active_) {
+      scalar_dirichlet_linearized(
+        dirichlet_bc_offsets_, owned_rhs.getLocalLength(),
+        owned_sln.getLocalViewDevice(), owned_rhs.getLocalViewDevice());
+    }
+    owned_rhs.modify_device();
+  }
 }
 INSTANTIATE_POLYCLASS(ConductionLinearizedResidualOperator);
-
 } // namespace matrix_free
 } // namespace nalu
 } // namespace sierra

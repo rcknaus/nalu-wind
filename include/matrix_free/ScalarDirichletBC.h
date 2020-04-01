@@ -16,8 +16,8 @@ using ra_tpetra_view_type =
 
 void scalar_dirichlet_residual(
   const_node_offset_view dirichlet_bc_offsets,
-  node_scalar_view qp1,
-  node_scalar_view qbc,
+  const_node_scalar_view qp1,
+  const_node_scalar_view qbc,
   int max_owned_row_lid,
   tpetra_view_type owned_rhs);
 

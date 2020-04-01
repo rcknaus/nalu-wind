@@ -73,7 +73,7 @@ realms:
       use_consolidated_solver_algorithm: no
       options:
         - noc_correction:
-            temperature: yes  
+            temperature: no
 
     output:
       output_data_base_name: conduction_p4.e

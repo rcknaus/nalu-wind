@@ -28,7 +28,9 @@
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
 #include "stk_topology/topology.hpp"
 
 namespace sierra {
@@ -113,15 +115,15 @@ protected:
           qfunc(stk::mesh::field_data(coordField, node));
       }
     }
-    mesh = ngp::Mesh(bulk);
-    q_field_ngp = ngp::Field<double>(bulk, q_field);
-    coord_field_ngp = ngp::Field<double>(bulk, coordField);
+    mesh = stk::mesh::NgpMesh(bulk);
+    q_field_ngp = stk::mesh::NgpField<double>(bulk, q_field);
+    coord_field_ngp = stk::mesh::NgpField<double>(bulk, coordField);
   }
   stk::mesh::MetaData meta;
   stk::mesh::BulkData bulk;
-  ngp::Mesh mesh;
-  ngp::Field<double> q_field_ngp;
-  ngp::Field<double> coord_field_ngp;
+  stk::mesh::NgpMesh mesh;
+  stk::mesh::NgpField<double> q_field_ngp;
+  stk::mesh::NgpField<double> coord_field_ngp;
 };
 
 TEST_F(SimdGatherFixture, coordinates_values_are_possible)

@@ -8,7 +8,7 @@
 
 #include "Tpetra_Operator.hpp"
 
-#include "stk_ngp/NgpProfilingBlock.hpp"
+#include "stk_mesh/base/NgpProfilingBlock.hpp"
 
 namespace sierra {
 namespace nalu {
@@ -17,12 +17,12 @@ namespace matrix_free {
 void
 scalar_dirichlet_residual(
   const_node_offset_view dirichlet_bc_offsets,
-  node_scalar_view qp1,
-  node_scalar_view qbc,
+  const_node_scalar_view qp1,
+  const_node_scalar_view qbc,
   int max_owned_row_lid,
   tpetra_view_type owned_rhs)
 {
-  ngp::ProfilingBlock pf("scalar_dirichlet_residual");
+  stk::mesh::ProfilingBlock pf("scalar_dirichlet_residual");
   Kokkos::parallel_for(
     "scalar_dirichlet_residual", dirichlet_bc_offsets.extent_int(0),
     KOKKOS_LAMBDA(int index) {
@@ -43,7 +43,7 @@ scalar_dirichlet_linearized(
   ra_tpetra_view_type xin,
   tpetra_view_type owned_rhs)
 {
-  ngp::ProfilingBlock pf("scalar_dirichlet_linearized");
+  stk::mesh::ProfilingBlock pf("scalar_dirichlet_linearized");
   Kokkos::parallel_for(
     "scalar_dirichlet_linearized", dirichlet_bc_offsets.extent_int(0),
     KOKKOS_LAMBDA(int index) {

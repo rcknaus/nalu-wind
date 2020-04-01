@@ -1,15 +1,14 @@
 #ifndef STK_TO_TPETRA_MAP_H
 #define STK_TO_TPETRA_MAP_H
 
-#include <memory>
-#include <stk_mesh/base/Field.hpp>
-#include <stk_mesh/base/Selector.hpp>
-#include <unordered_map>
+#include "matrix_free/StkToTpetraLocalIndices.h"
+
+#include "Tpetra_Map_decl.hpp"
+#include "Kokkos_View.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/Types.hpp"
 
 #include "Teuchos_RCP.hpp"
-#include "Tpetra_Map.hpp"
-#include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
 
 namespace stk {
 namespace mesh {
@@ -21,41 +20,44 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-using map_type = Tpetra::Map<>;
+const auto global_ordinal_index_base = 1;
 
-void fill_id_fields(
-  const ngp::Mesh&,
-  const stk::mesh::Selector&,
-  stk::mesh::Field<stk::mesh::EntityId>&,
-  stk::mesh::Field<typename map_type::global_ordinal_type>&,
-  stk::mesh::PartVector = {});
+struct StkToTpetraMaps
+{
+public:
+  using tpetra_lid_t = typename Tpetra::Map<>::local_ordinal_type;
+  using stk_lid_t = stk::mesh::FastMeshIndex;
+  using gid_t = typename Tpetra::Map<>::global_ordinal_type;
 
-void fill_tpetra_id_field(
-  const ngp::Mesh&,
-  const stk::mesh::Selector&,
-  const stk::mesh::Field<stk::mesh::EntityId>&,
-  stk::mesh::Field<typename map_type::global_ordinal_type>&,
-  stk::mesh::PartVector = {});
+  StkToTpetraMaps(
+    const stk::mesh::NgpMesh& mesh,
+    const stk::mesh::Selector& active,
+    stk::mesh::NgpConstField<gid_t> gid,
+    stk::mesh::Selector replicas = {});
 
-Teuchos::RCP<const map_type> owned_row_map(
-  const ngp::Mesh&,
-  const stk::mesh::Field<stk::mesh::EntityId>&,
-  const stk::mesh::Selector&,
-  stk::mesh::PartVector = {});
+  const Tpetra::Map<> owned;
+  const Tpetra::Map<> owned_and_shared;
+  const Kokkos::View<const tpetra_lid_t*> stk_lid_to_tpetra_lid;
+  const Kokkos::View<const stk_lid_t*> tpetra_lid_to_stk_lid;
+};
 
-Teuchos::RCP<const map_type> owned_and_shared_row_map(
-  const ngp::Mesh&,
-  const stk::mesh::Field<stk::mesh::EntityId>&,
-  const stk::mesh::Field<typename map_type::global_ordinal_type>&,
-  const stk::mesh::Selector&,
-  stk::mesh::PartVector = {});
+void populate_global_id_field(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& active_linsys,
+  stk::mesh::NgpField<typename Tpetra::Map<>::global_ordinal_type> gids);
 
-std::unordered_map<stk::mesh::EntityId, int> global_to_local_id_map(
-  const ngp::Mesh&,
-  const stk::mesh::Field<stk::mesh::EntityId>&,
-  const stk::mesh::Field<typename map_type::global_ordinal_type>&,
-  const stk::mesh::Selector&,
-  stk::mesh::PartVector = {});
+Tpetra::Map<> make_owned_row_map(
+  const stk::mesh::NgpMesh& mesh, const stk::mesh::Selector& active_linsys);
+
+Tpetra::Map<> shared_row_map(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& active_linsys,
+  stk::mesh::NgpConstField<typename Tpetra::Map<>::global_ordinal_type> gids);
+
+Tpetra::Map<> make_owned_and_shared_row_map(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& active_linsys,
+  stk::mesh::NgpConstField<typename Tpetra::Map<>::global_ordinal_type> gids);
 
 } // namespace matrix_free
 } // namespace nalu

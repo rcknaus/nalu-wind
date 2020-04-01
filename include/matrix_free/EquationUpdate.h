@@ -4,7 +4,8 @@
 #include "matrix_free/PolynomialOrders.h"
 #include "Kokkos_Array.hpp"
 
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
+#include "stk_mesh/base/Part.hpp"
 
 #include <memory>
 
@@ -19,9 +20,9 @@ public:
   virtual void initialize() = 0;
   virtual void swap_states() = 0;
   virtual void predict_state() = 0;
-  virtual void compute_preconditioner(double = -1) = 0;
-  virtual void
-  compute_update(Kokkos::Array<double, 3>, ngp::Field<double>&) = 0;
+  virtual void compute_preconditioner(double scaling = -1) = 0;
+  virtual void compute_update(
+    Kokkos::Array<double, 3> gammas, stk::mesh::NgpField<double>& delta) = 0;
   virtual void update_solution_fields() = 0;
   virtual double provide_norm() const = 0;
   virtual double provide_scaled_norm() const = 0;
@@ -31,7 +32,6 @@ public:
 inline bool
 part_is_valid_for_matrix_free(int order, const stk::mesh::Part& part)
 {
-  return true;
   if (
     part.topology() == stk::topology::HEX_8 ||
     part.topology() == stk::topology::QUAD_4) {
@@ -45,11 +45,11 @@ part_is_valid_for_matrix_free(int order, const stk::mesh::Part& part)
   }
 
   if (part.topology().is_superelement()) {
-    return order == std::cbrt(part.topology().num_nodes() + 1);
+    return order == floor(std::cbrt(part.topology().num_nodes() + 1) - 1);
   }
 
   if (part.topology().is_superface()) {
-    return order == std::sqrt(part.topology().num_nodes() + 1);
+    return order == floor(std::sqrt(part.topology().num_nodes() + 1) - 1);
   }
 
   for (const auto* subpart : part.subsets()) {

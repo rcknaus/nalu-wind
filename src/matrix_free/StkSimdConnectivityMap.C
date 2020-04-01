@@ -22,15 +22,16 @@ namespace impl {
 template <int p>
 elem_mesh_index_view<p>
 stk_connectivity_map_t<p>::invoke(
-  const ngp::Mesh& mesh, stk::mesh::Selector active)
+  const stk::mesh::NgpMesh& mesh, stk::mesh::Selector active)
 {
   constexpr auto map = StkNodeOrderMapping<p>::map;
   elem_mesh_index_view<p> entity_elem(
     "elem_ent_row_map",
     num_simd_elements(mesh, stk::topology::ELEM_RANK, active));
 
-
-  auto fill_connectivity = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent) {
+  auto fill_connectivity =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent)
+  {
     const auto nodes =
       mesh.get_nodes(stk::topology::ELEM_RANK, mesh.fast_mesh_index(ent));
     for (int k = 0; k < p + 1; ++k) {
@@ -43,8 +44,9 @@ stk_connectivity_map_t<p>::invoke(
     }
   };
 
-
-  auto fill_invalid = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity) {
+  auto fill_invalid =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity)
+  {
     for (int k = 0; k < p + 1; ++k) {
       for (int j = 0; j < p + 1; ++j) {
         for (int i = 0; i < p + 1; ++i) {
@@ -55,7 +57,8 @@ stk_connectivity_map_t<p>::invoke(
     }
   };
 
-  simd_traverse(mesh, stk::topology::ELEM_RANK, active, fill_connectivity, fill_invalid);
+  simd_traverse(
+    mesh, stk::topology::ELEM_RANK, active, fill_connectivity, fill_invalid);
   return entity_elem;
 }
 INSTANTIATE_POLYSTRUCT(stk_connectivity_map_t);
@@ -63,7 +66,7 @@ INSTANTIATE_POLYSTRUCT(stk_connectivity_map_t);
 template <int p>
 elem_offset_view<p>
 create_offset_map_t<p>::invoke(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   const stk::mesh::Selector& active,
   ra_entity_row_view_type elid)
 {
@@ -73,7 +76,9 @@ create_offset_map_t<p>::invoke(
 
   constexpr auto map = StkNodeOrderMapping<p>::map;
 
-  auto fill_entity_lids = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent) {
+  auto fill_entity_lids =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity ent)
+  {
     const auto nodes =
       mesh.get_nodes(stk::topology::ELEM_RANK, mesh.fast_mesh_index(ent));
     for (int k = 0; k < p + 1; ++k) {
@@ -86,7 +91,9 @@ create_offset_map_t<p>::invoke(
     }
   };
 
-  auto fill_invalid = KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity) {
+  auto fill_invalid =
+    KOKKOS_LAMBDA(int simd_elem_index, int simd_index, stk::mesh::Entity)
+  {
     for (int k = 0; k < p + 1; ++k) {
       for (int j = 0; j < p + 1; ++j) {
         for (int i = 0; i < p + 1; ++i) {
@@ -96,7 +103,8 @@ create_offset_map_t<p>::invoke(
     }
   };
 
-  simd_traverse(mesh, stk::topology::ELEM_RANK, active, fill_entity_lids, fill_invalid);
+  simd_traverse(
+    mesh, stk::topology::ELEM_RANK, active, fill_entity_lids, fill_invalid);
   return elem_offset;
 }
 

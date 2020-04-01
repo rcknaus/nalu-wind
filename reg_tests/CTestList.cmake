@@ -216,6 +216,7 @@ else(NOT ENABLE_CUDA)
   # Regression tests
   #=============================================================================
   add_test_r(ablNeutralEdge 2)
+  add_test_r(conduction_p4 2)
 
   #=============================================================================
   # GPU unit tests

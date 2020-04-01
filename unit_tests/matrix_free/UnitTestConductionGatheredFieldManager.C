@@ -3,35 +3,30 @@
 #include "matrix_free/ConductionFields.h"
 #include "StkConductionFixture.h"
 
-#include "Teuchos_RCP.hpp"
-#include "Tpetra_Export.hpp"
-#include "Tpetra_Import.hpp"
-#include "Tpetra_Map.hpp"
-#include "Tpetra_MultiVector.hpp"
-#include "Tpetra_Operator.hpp"
+#include "Kokkos_Macros.hpp"
+#include "Kokkos_Parallel_Reduce.hpp"
 
 #include "stk_mesh/base/MetaData.hpp"
 #include "stk_ngp/NgpFieldParallel.hpp"
+#include "stk_mesh/base/FieldState.hpp"
+#include "stk_math/StkMath.hpp"
+#include "stk_mesh/base/NgpForEachEntity.hpp"
+#include "stk_simd/Simd.hpp"
 
-#include <Kokkos_Macros.hpp>
-#include <Kokkos_Parallel_Reduce.hpp>
 #include <memory>
-#include <stk_math/StkMath.hpp>
-#include <stk_ngp/NgpForEachEntity.hpp>
-#include <stk_simd/Simd.hpp>
 
 namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-class ConductionGatheredFieldManagerFixture : public ::ConductionFixture
+class GatheredFieldManagerFixture : public ::ConductionFixture
 {
 protected:
   static constexpr int nx = 32;
   static constexpr double scale = M_PI;
-  ConductionGatheredFieldManagerFixture()
+  GatheredFieldManagerFixture()
     : ConductionFixture(nx, scale),
-      field_gather(meta, mesh, fm, meta.universal_part(), {})
+      field_gather(bulk, meta.universal_part(), {})
   {
     auto& coordField =
       *meta.get_field<stk::mesh::Field<double, stk::mesh::Cartesian3d>>(
@@ -55,7 +50,7 @@ protected:
   ConductionGatheredFieldManager<order> field_gather;
 };
 
-TEST_F(ConductionGatheredFieldManagerFixture, gather_all)
+TEST_F(GatheredFieldManagerFixture, gather_all)
 {
   field_gather.gather_all();
   auto residual_fields = field_gather.get_residual_fields();
@@ -65,7 +60,7 @@ TEST_F(ConductionGatheredFieldManagerFixture, gather_all)
   EXPECT_TRUE(residual_fields.qp1.extent_int(0) > 1);
 }
 
-TEST_F(ConductionGatheredFieldManagerFixture, swap_states)
+TEST_F(GatheredFieldManagerFixture, swap_states)
 {
   field_gather.gather_all();
   auto residual_fields = field_gather.get_residual_fields();
@@ -105,37 +100,33 @@ sum_field(scalar_view<p> qp1)
 
 void
 set_field(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   stk::mesh::Selector selector,
-  ngp::Field<double>& field,
+  stk::mesh::NgpField<double> field,
   double val)
 {
-  ngp::for_each_entity_run(
+  stk::mesh::for_each_entity_run(
     mesh, stk::topology::NODE_RANK, selector,
-    KOKKOS_LAMBDA(ngp::Mesh::MeshIndex mi) { field.get(mi, 0) = val; });
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) { field.get(mi, 0) = val; });
 }
 
 void
 double_field(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   stk::mesh::Selector selector,
-  ngp::Field<double>& field)
+  stk::mesh::NgpField<double> field)
 {
-  ngp::for_each_entity_run(
+  stk::mesh::for_each_entity_run(
     mesh, stk::topology::NODE_RANK, selector,
-    KOKKOS_LAMBDA(ngp::Mesh::MeshIndex mi) { field.get(mi, 0) *= 2; });
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) { field.get(mi, 0) *= 2; });
 }
 
 } // namespace
 
-TEST_F(ConductionGatheredFieldManagerFixture, update_solution)
+TEST_F(GatheredFieldManagerFixture, update_solution)
 {
   auto sol_field =
-    fm.get_field<double>(meta
-                           .get_field<stk::mesh::Field<double>>(
-                             stk::topology::NODE_RANK, conduction_info::q_name)
-                           ->field_state(stk::mesh::StateNP1)
-                           ->mesh_meta_data_ordinal());
+    get_ngp_field<double>(meta, conduction_info::q_name, stk::mesh::StateNP1);
   set_field(mesh, meta.universal_part(), sol_field, 1);
 
   field_gather.gather_all();

@@ -9,16 +9,20 @@
 
 #include "MatrixFreeHeatCondEquationSystem.h"
 
+#include "matrix_free/StkToTpetraMap.h"
+#include "matrix_free/ConductionUpdate.h"
+
+#include "NaluEnv.h"
+#include "NaluParsing.h"
 #include "PeriodicManager.h"
 #include "Realm.h"
 #include "TimeIntegrator.h"
-#include "matrix_free/ConductionUpdate.h"
-#include "matrix_free/StkToTpetraMap.h"
-#include "ngp_utils/NgpLoopUtils.h"
-#include "ngp_utils/NgpFieldBLAS.h"
+
 #include "utils/StkHelpers.h"
 
-#include "Tpetra_Map.hpp"
+#include "stk_mesh/base/Selector.hpp"
+#include <stk_mesh/base/NgpForEachEntity.hpp>
+#include <stk_mesh/base/Types.hpp>
 
 namespace sierra {
 namespace nalu {
@@ -41,32 +45,17 @@ MatrixFreeHeatCondEquationSystem::~MatrixFreeHeatCondEquationSystem() = default;
 
 namespace {
 template <typename T = double>
-ngp::Field<T>&
-field_by_name(
-  const ngp::FieldManager& fm,
-  stk::topology::rank_t rank,
+stk::mesh::NgpField<T>&
+get_node_field(
+  const stk::mesh::MetaData& meta,
   std::string name,
-  stk::mesh::FieldState fs = stk::mesh::StateNone)
+  stk::mesh::FieldState state = stk::mesh::StateNP1)
 {
-  const auto& meta = fm.get_bulk().mesh_meta_data();
-  ThrowRequireMsg(
-    meta.get_field(rank, name), std::to_string(rank) + " " + name);
-  ThrowRequireMsg(
-    meta.get_field(rank, name)->field_state(fs),
-    std::to_string(rank) + " " + name + " " + std::to_string(fs));
-  auto ordinal =
-    meta.get_field(rank, name)->field_state(fs)->mesh_meta_data_ordinal();
-  return fm.template get_field<T>(ordinal);
-}
-
-template <typename T = double>
-ngp::Field<T>&
-field_by_name(
-  const ngp::FieldManager& fm,
-  std::string name,
-  stk::mesh::FieldState fs = stk::mesh::StateNone)
-{
-  return field_by_name<T>(fm, stk::topology::NODE_RANK, name, fs);
+  ThrowAssert(meta.get_field(stk::topology::NODE_RANK, name));
+  ThrowAssert(
+    meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+  return stk::mesh::get_updated_ngp_field<T>(
+    *meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
 }
 
 void
@@ -83,7 +72,7 @@ register_scalar_nodal_field_on_part(
   stk::mesh::put_field_on_mesh(field, selector, 1, &ic);
 }
 
-}
+} // namespace
 
 void
 MatrixFreeHeatCondEquationSystem::register_nodal_fields(stk::mesh::Part* part)
@@ -120,7 +109,7 @@ MatrixFreeHeatCondEquationSystem::register_interior_algorithm(
   ThrowRequireMsg(
     matrix_free::part_is_valid_for_matrix_free(polynomial_order_, *part),
     "part " + part->name() + " has invalid topology " +
-      part->topology().name() + ". Only Quad4 and Quad9 supported");
+      part->topology().name() + ". Only hex8/hex27 supported");
   interior_selector_ |= *part;
 }
 
@@ -158,26 +147,27 @@ MatrixFreeHeatCondEquationSystem::register_wall_bc(
 void
 MatrixFreeHeatCondEquationSystem::initialize()
 {
-  ngp::ProfilingBlock pf("MatrixFreeHeatCondEquationSystem::initialize");
+  stk::mesh::ProfilingBlock pf("MatrixFreeHeatCondEquationSystem::initialize");
+
+  stk::mesh::Selector replica_selector{};
+  if (realm_.periodicManager_ != nullptr) {
+    replica_selector =
+      stk::mesh::selectUnion(realm_.periodicManager_->get_slave_part_vector());
+  }
+  auto& bulk = realm_.bulk_data();
   {
-    ngp::ProfilingBlock pf_inner("fill_tpetra_id_field");
-
-    const auto& nalu_gid_field = *meta_.get_field<GlobalIdFieldType>(
-      stk::topology::NODE_RANK, names::nalu_gid);
-    auto& tpetra_gid_field = *meta_.get_field<TpetIDFieldType>(
-      stk::topology::NODE_RANK, names::tpetra_gid);
-
-    matrix_free::fill_tpetra_id_field(
-      realm_.ngp_mesh(), interior_selector_, nalu_gid_field, tpetra_gid_field,
-      realm_.allPeriodicInteractingParts_);
+    stk::mesh::ProfilingBlock pf_inner("fill_tpetra_id_field");
+    matrix_free::populate_global_id_field(
+      bulk.get_updated_ngp_mesh(), interior_selector_ - replica_selector,
+      get_node_field<typename Tpetra::Map<>::global_ordinal_type>(meta_, names::tpetra_gid));
   }
 
   {
-    ngp::ProfilingBlock pf_inner("make_equation_update");
+    stk::mesh::ProfilingBlock pf_inner("make_equation_update");
     update_ = matrix_free::make_equation_update<matrix_free::ConductionUpdate>(
-      polynomial_order_, meta_, realm_.ngp_mesh(), realm_.ngp_field_manager(),
+      polynomial_order_, bulk,
       realm_.solver_parameters("temperature"), interior_selector_,
-      dirichlet_selector_, flux_selector_);
+      dirichlet_selector_, flux_selector_, replica_selector);
   }
 }
 
@@ -188,49 +178,50 @@ MatrixFreeHeatCondEquationSystem::reinitialize_linear_system()
   initialize();
 }
 
+namespace {
+
+void
+field_hadamard(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& selector,
+  stk::mesh::NgpField<double>& xy,
+  const stk::mesh::NgpConstField<double>& x,
+  const stk::mesh::NgpConstField<double>& y)
+{
+  stk::mesh::for_each_entity_run(mesh, stk::topology::NODE_RANK, selector,
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
+      xy.get(mi, 0) = x.get(mi, 0) * y.get(mi, 0);
+    });
+  xy.modify_on_device();
+}
+
+} // namespace
+
+
 void
 MatrixFreeHeatCondEquationSystem::predict_state()
 {
-  ngp::ProfilingBlock("MatrixFreeHeatCondEquationSystem::predict_state");
+  stk::mesh::ProfilingBlock("MatrixFreeHeatCondEquationSystem::predict_state");
 
-  const ngp::Field<double>& current_state = field_by_name(
-    realm_.ngp_field_manager(), names::temperature, stk::mesh::StateN);
-  ngp::Field<double>& predicted_state = field_by_name(
-    realm_.ngp_field_manager(), names::temperature, stk::mesh::StateNP1);
-  nalu_ngp::field_copy(
-    realm_.ngp_mesh(), interior_selector_, predicted_state, current_state);
+  const auto& current_state =
+    get_node_field(meta_, names::temperature, stk::mesh::StateN);
+  auto& predicted_state =
+    get_node_field(meta_, names::temperature, stk::mesh::StateNP1);
+  stk::mesh::for_each_entity_run(realm_.bulk_data().get_updated_ngp_mesh(), stk::topology::NODE_RANK, interior_selector_,
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
+      predicted_state.get(mi, 0) = current_state.get(mi,0);
+    });
   predicted_state.modify_on_device();
-}
-
-namespace {
-
- void field_hadamard(
-   const ngp::Mesh& mesh, const stk::mesh::Selector& selector,
-   ngp::Field<double>& xy, const ngp::ConstField<double>& x, const ngp::ConstField<double>& y)
- {
-   nalu_ngp::run_entity_algorithm(
-     "volumetric heat capacity", mesh, stk::topology::NODE_RANK,
-     selector, KOKKOS_LAMBDA(const ngp::Mesh::MeshIndex& mi) {
-       xy.get(mi, 0) = x.get(mi, 0) * y.get(mi, 0);
-     });
-   xy.modify_on_device();
- }
-
 }
 
 void
 MatrixFreeHeatCondEquationSystem::compute_volumetric_heat_capacity() const
 {
-  ngp::ProfilingBlock pf_inner("compute_volumetric_heat_capacity");
-
-  const ngp::ConstField<double>& rho =
-    field_by_name(realm_.ngp_field_manager(), names::density);
-  const ngp::ConstField<double>& cp =
-    field_by_name(realm_.ngp_field_manager(), names::specific_heat);
-  ngp::Field<double>& alpha =
-    field_by_name(realm_.ngp_field_manager(), names::volume_weight);
-
-  field_hadamard(realm_.ngp_mesh(), interior_selector_, alpha, rho, cp);
+  stk::mesh::ProfilingBlock pf_inner("compute_volumetric_heat_capacity");
+  const auto& rho = get_node_field(meta_, names::density);
+  const auto& cp = get_node_field(meta_, names::specific_heat);
+  auto& alpha = get_node_field(meta_, names::volume_weight);
+  field_hadamard(realm_.bulk_data().get_updated_ngp_mesh(), interior_selector_, alpha, rho, cp);
 }
 
 double
@@ -248,7 +239,7 @@ MatrixFreeHeatCondEquationSystem::provide_scaled_norm() const
 void
 MatrixFreeHeatCondEquationSystem::sync_delta_on_periodic_nodes() const
 {
-  ngp::ProfilingBlock pf("sync_periodic nodes");
+  stk::mesh::ProfilingBlock pf("sync_periodic nodes");
   if (realm_.hasPeriodic_) {
     realm_.periodic_delta_solution_update(
       meta_.get_field(stk::topology::NODE_RANK, names::delta), 1);
@@ -273,12 +264,12 @@ nonlinear_iteration_banner(
          << std::endl;
 }
 
-}
+} // namespace
 
 void
 MatrixFreeHeatCondEquationSystem::initialize_solve_and_update()
 {
-  ngp::ProfilingBlock pf("initialize");
+  stk::mesh::ProfilingBlock pf("initialize");
   if (initialized_) {
     return;
   }
@@ -286,6 +277,21 @@ MatrixFreeHeatCondEquationSystem::initialize_solve_and_update()
 
   compute_volumetric_heat_capacity();
   update_->initialize();
+}
+
+void
+field_add(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& active,
+  stk::mesh::NgpConstField<double> x,
+  stk::mesh::NgpField<double> y)
+{
+  stk::mesh::for_each_entity_run(
+    mesh, stk::topology::NODE_RANK, active,
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
+      y.get(mi, 0) += x.get(mi, 0);
+    });
+  y.modify_on_device();
 }
 
 void
@@ -316,16 +322,18 @@ MatrixFreeHeatCondEquationSystem::solve_and_update()
     const auto time_start_solve = NaluEnv::self().nalu_time();
     update_->compute_update(
       compute_scaled_gammas(*realm_.timeIntegrator_),
-      field_by_name(realm_.ngp_field_manager(), names::delta));
+      get_node_field(meta_, names::delta));
     const auto time_end_solve = NaluEnv::self().nalu_time();
     timerSolve_ += time_end_solve - time_start_solve;
 
     const auto time_start_assemble = NaluEnv::self().nalu_time();
     sync_delta_on_periodic_nodes();
-    solution_update(
-      1.0, *meta_.get_field(stk::topology::NODE_RANK, names::delta), 1.0,
-      *meta_.get_field(stk::topology::NODE_RANK, names::temperature)
-         ->field_state(stk::mesh::StateNP1));
+
+   field_add(
+    realm_.bulk_data().get_updated_ngp_mesh(), interior_selector_,
+    get_node_field(meta_, names::delta),
+    get_node_field(meta_, names::temperature));
+
     update_->update_solution_fields();
     const auto time_end_assemble = NaluEnv::self().nalu_time();
     timerAssemble_ += time_end_assemble - time_start_assemble;

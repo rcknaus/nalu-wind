@@ -1,13 +1,15 @@
 #include "matrix_free/StkSimdGatheredElementData.h"
 
-#include "Kokkos_ExecPolicy.hpp"
-#include "Kokkos_Macros.hpp"
 #include "matrix_free/PolynomialOrders.h"
 #include "matrix_free/StkSimdConnectivityMap.h"
+
+#include "Kokkos_ExecPolicy.hpp"
+#include "Kokkos_Macros.hpp"
+
 #include "stk_mesh/base/Field.hpp"
-#include "stk_mesh/base/FieldBase.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
 #include "stk_simd/Simd.hpp"
 
 namespace sierra {
@@ -19,7 +21,7 @@ template <int p>
 void
 stk_simd_scalar_field_gather_t<p>::invoke(
   const_elem_mesh_index_view<p> conn,
-  const ngp::ConstField<double>& field,
+  const stk::mesh::NgpConstField<double>& field,
   scalar_view<p> simd_element_field)
 {
   Kokkos::parallel_for(
@@ -47,7 +49,7 @@ template <int p>
 void
 stk_simd_vector_field_gather_t<p>::invoke(
   const_elem_mesh_index_view<p> conn,
-  const ngp::ConstField<double>& field,
+  const stk::mesh::NgpConstField<double>& field,
   vector_view<p> simd_element_field)
 {
   Kokkos::parallel_for(
@@ -81,7 +83,7 @@ template <int p>
 void
 stk_simd_face_scalar_field_gather_t<p>::invoke(
   const_face_mesh_index_view<p> conn,
-  const ngp::ConstField<double>& field,
+  const stk::mesh::NgpConstField<double>& field,
   face_scalar_view<p> simd_element_field)
 {
   Kokkos::parallel_for(
@@ -106,7 +108,7 @@ template <int p>
 void
 stk_simd_face_vector_field_gather_t<p>::invoke(
   const_face_mesh_index_view<p> conn,
-  const ngp::ConstField<double>& field,
+  const stk::mesh::NgpConstField<double>& field,
   face_vector_view<p> simd_element_field)
 {
   Kokkos::parallel_for(
@@ -141,7 +143,7 @@ namespace matrix_free {
 void
 stk_simd_scalar_node_gather(
   const_node_mesh_index_view conn,
-  const ngp::ConstField<double>& field,
+  const stk::mesh::NgpConstField<double>& field,
   node_scalar_view simd_node_field)
 {
   Kokkos::parallel_for(

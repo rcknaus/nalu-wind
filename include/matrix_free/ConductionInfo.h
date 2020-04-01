@@ -17,12 +17,12 @@ struct conduction_info
 
   static constexpr int num_physics_fields = 5;
   static constexpr int num_coefficient_fields = 2;
+  static constexpr auto coord_name = "coordinates";
   static constexpr auto q_name = "temperature";
   static constexpr auto qtmp_name = "tTmp";
   static constexpr auto volume_weight_name = "volumetric_heat_capacity";
   static constexpr auto diffusion_weight_name = "thermal_conductivity";
-  static constexpr auto gid_name = "nalu_global_id";
-  static constexpr auto tpetra_gid_name = "tpet_global_id";
+  static constexpr auto gid_name = "tpet_global_id";
   static constexpr auto qbc_name = "temperature_bc";
   static constexpr auto flux_name = "heat_flux_bc";
 };

@@ -20,7 +20,7 @@
 #include "stk_mesh/base/HashEntityAndEntityKey.hpp"
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 #include "stk_topology/topology.hpp"
 
 namespace sierra {
@@ -59,7 +59,7 @@ entity_to_row_lid_mapping(
 
 entity_row_view_type
 entity_to_row_lid_mapping(
-  const ngp::Mesh& mesh,
+  const stk::mesh::NgpMesh& mesh,
   const stk::mesh::Field<stk::mesh::EntityId>& stk_gid_field,
   const stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
     tpetra_gid_field,
@@ -108,7 +108,7 @@ valid_elid_offsets(const_entity_row_view_type elid)
 
 mesh_index_row_view_type
 row_lid_to_mesh_index_mapping(
-  const ngp::Mesh& mesh, const const_entity_row_view_type elid)
+  const stk::mesh::NgpMesh& mesh, const const_entity_row_view_type elid)
 {
   const auto valid_elids = valid_elid_offsets(elid);
   auto lide = mesh_index_row_view_type("lide", valid_elids.size());

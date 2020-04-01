@@ -17,8 +17,9 @@
 #include "stk_mesh/base/MetaData.hpp"
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
-#include "stk_ngp/Ngp.hpp"
-#include "stk_ngp/NgpFieldManager.hpp"
+#include "stk_mesh/base/Ngp.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
 #include "stk_topology/topology.hpp"
 #include "stk_unit_test_utils/stk_mesh_fixtures/CoordinateMapping.hpp"
 #include "stk_unit_test_utils/stk_mesh_fixtures/Hex27Fixture.hpp"
@@ -27,6 +28,7 @@
 class ConductionFixture : public ::testing::Test
 {
 protected:
+  using gid_type = typename Tpetra::Map<>::global_ordinal_type;
   static constexpr int order = 1;
   ConductionFixture(int nx, double scale);
   stk::mesh::Field<double, stk::mesh::Cartesian3d>& coordinate_field();
@@ -39,18 +41,16 @@ protected:
   stk::mesh::Field<double>& qtmp_field;
   stk::mesh::Field<double>& alpha_field;
   stk::mesh::Field<double>& lambda_field;
-  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
-  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
-    tpetra_gid_field;
-
-  ngp::Mesh mesh;
-  ngp::FieldManager fm;
-  ngp::Field<stk::mesh::EntityId> gid_field_ngp;
+  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>& gid_field;
+  stk::mesh::NgpMesh mesh;
+  stk::mesh::NgpField<typename Tpetra::Map<>::global_ordinal_type>
+    gid_field_ngp;
 };
 
 class ConductionFixtureP2 : public ::testing::Test
 {
 protected:
+  using gid_type = typename Tpetra::Map<>::global_ordinal_type;
   static constexpr int order = 2;
   ConductionFixtureP2(int nx, double scale);
   stk::mesh::Field<double, stk::mesh::Cartesian3d>& coordinate_field();
@@ -59,17 +59,12 @@ protected:
   stk::mesh::BulkData& bulk;
   stk::io::StkMeshIoBroker io;
   stk::mesh::Field<double>& q_field;
-  stk::mesh::Field<double>& qbc_field;
-  stk::mesh::Field<double>& flux_field;
   stk::mesh::Field<double>& qtmp_field;
   stk::mesh::Field<double>& alpha_field;
   stk::mesh::Field<double>& lambda_field;
-  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
-  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
-    tpetra_gid_field;
-
-  ngp::Mesh mesh;
-  ngp::FieldManager fm;
-  ngp::Field<stk::mesh::EntityId> gid_field_ngp;
+  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>& gid_field;
+  stk::mesh::NgpMesh mesh;
+  stk::mesh::NgpField<typename Tpetra::Map<>::global_ordinal_type>
+    gid_field_ngp;
 };
 #endif

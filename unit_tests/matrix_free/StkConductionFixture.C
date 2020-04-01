@@ -18,8 +18,10 @@
 #include "stk_mesh/base/MetaData.hpp"
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
-#include "stk_ngp/Ngp.hpp"
-#include "stk_ngp/NgpFieldManager.hpp"
+#include "stk_mesh/base/NgpMesh.hpp"
+#include "stk_mesh/base/NgpField.hpp"
+#include "stk_mesh/base/GetNgpField.hpp"
+
 #include "stk_topology/topology.hpp"
 #include "stk_unit_test_utils/stk_mesh_fixtures/CoordinateMapping.hpp"
 #include "stk_unit_test_utils/stk_mesh_fixtures/HexFixture.hpp"
@@ -47,28 +49,18 @@ ConductionFixture::ConductionFixture(int nx, double scale)
     lambda_field(meta.declare_field<stk::mesh::Field<double>>(
       stk::topology::NODE_RANK,
       sierra::nalu::matrix_free::conduction_info::diffusion_weight_name)),
-    gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
+    gid_field(meta.declare_field<
+              stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
       stk::topology::NODE_RANK,
-      sierra::nalu::matrix_free::conduction_info::gid_name)),
-    tpetra_gid_field(
-      meta.declare_field<
-        stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
-        stk::topology::NODE_RANK,
-        sierra::nalu::matrix_free::conduction_info::tpetra_gid_name))
+      sierra::nalu::matrix_free::conduction_info::gid_name))
 {
-  double one_d = 1.0;
-  stk::mesh::EntityId one64 = 1;
-  typename Tpetra::Map<>::global_ordinal_type one_long = 1;
-
-  stk::mesh::put_field_on_mesh(gid_field, meta.universal_part(), 1, &one64);
-  stk::mesh::put_field_on_mesh(
-    tpetra_gid_field, meta.universal_part(), 1, &one_long);
-  stk::mesh::put_field_on_mesh(q_field, meta.universal_part(), 3, &one_d);
-  stk::mesh::put_field_on_mesh(qbc_field, meta.universal_part(), 1, &one_d);
-  stk::mesh::put_field_on_mesh(flux_field, meta.universal_part(), 1, &one_d);
-  stk::mesh::put_field_on_mesh(qtmp_field, meta.universal_part(), 1, &one_d);
-  stk::mesh::put_field_on_mesh(alpha_field, meta.universal_part(), 1, &one_d);
-  stk::mesh::put_field_on_mesh(lambda_field, meta.universal_part(), 1, &one_d);
+  stk::mesh::put_field_on_mesh(gid_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(q_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(qbc_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(flux_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(qtmp_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(alpha_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(lambda_field, meta.universal_part(), 1, nullptr);
 
   const std::string nx_s = std::to_string(nx);
   const std::string name =
@@ -104,10 +96,10 @@ ConductionFixture::ConductionFixture(int nx, double scale)
       *stk::mesh::field_data(gid_field, node) = bulk.identifier(node);
     }
   }
-  mesh = ngp::Mesh(bulk);
-  fm = ngp::FieldManager(bulk);
-  sierra::nalu::matrix_free::fill_id_fields(
-    mesh, meta.universal_part(), gid_field, tpetra_gid_field);
+  mesh = bulk.get_updated_ngp_mesh();
+  gid_field_ngp = stk::mesh::get_updated_ngp_field<gid_type>(gid_field);
+  sierra::nalu::matrix_free::populate_global_id_field(
+    mesh, meta.universal_part(), gid_field_ngp);
 }
 
 stk::mesh::Field<double, stk::mesh::Cartesian3d>&
@@ -126,12 +118,6 @@ ConductionFixtureP2::ConductionFixtureP2(int nx, double scale)
       stk::topology::NODE_RANK,
       sierra::nalu::matrix_free::conduction_info::q_name,
       3)),
-    qbc_field(meta.declare_field<stk::mesh::Field<double>>(
-      stk::topology::NODE_RANK,
-      sierra::nalu::matrix_free::conduction_info::qbc_name)),
-    flux_field(meta.declare_field<stk::mesh::Field<double>>(
-      stk::topology::NODE_RANK,
-      sierra::nalu::matrix_free::conduction_info::flux_name)),
     qtmp_field(meta.declare_field<stk::mesh::Field<double>>(
       stk::topology::NODE_RANK,
       sierra::nalu::matrix_free::conduction_info::qtmp_name,
@@ -142,38 +128,20 @@ ConductionFixtureP2::ConductionFixtureP2(int nx, double scale)
     lambda_field(meta.declare_field<stk::mesh::Field<double>>(
       stk::topology::NODE_RANK,
       sierra::nalu::matrix_free::conduction_info::diffusion_weight_name)),
-    gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
+    gid_field(meta.declare_field<
+              stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
       stk::topology::NODE_RANK,
-      sierra::nalu::matrix_free::conduction_info::gid_name)),
-    tpetra_gid_field(
-      meta.declare_field<
-        stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
-        stk::topology::NODE_RANK,
-        sierra::nalu::matrix_free::conduction_info::tpetra_gid_name))
+      sierra::nalu::matrix_free::conduction_info::gid_name))
 {
   for (auto* part : fixture.m_elem_parts) {
     stk::io::put_io_part_attribute(*part);
   }
 
-  double one_double = 1.0;
-  stk::mesh::EntityId one_uint64 = 1;
-  typename Tpetra::Map<>::global_ordinal_type one_long = 1;
-
-  stk::mesh::put_field_on_mesh(
-    gid_field, meta.universal_part(), 1, &one_uint64);
-  stk::mesh::put_field_on_mesh(
-    tpetra_gid_field, meta.universal_part(), 1, &one_long);
-  stk::mesh::put_field_on_mesh(q_field, meta.universal_part(), 3, &one_double);
-  stk::mesh::put_field_on_mesh(
-    qbc_field, meta.universal_part(), 1, &one_double);
-  stk::mesh::put_field_on_mesh(
-    flux_field, meta.universal_part(), 1, &one_double);
-  stk::mesh::put_field_on_mesh(
-    qtmp_field, meta.universal_part(), 1, &one_double);
-  stk::mesh::put_field_on_mesh(
-    alpha_field, meta.universal_part(), 1, &one_double);
-  stk::mesh::put_field_on_mesh(
-    lambda_field, meta.universal_part(), 1, &one_double);
+  stk::mesh::put_field_on_mesh(gid_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(q_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(qtmp_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(alpha_field, meta.universal_part(), 1, nullptr);
+  stk::mesh::put_field_on_mesh(lambda_field, meta.universal_part(), 1, nullptr);
   fixture.generate_mesh();
 
   auto& coordField = coordinate_field();
@@ -202,10 +170,10 @@ ConductionFixtureP2::ConductionFixtureP2(int nx, double scale)
     }
   }
   io.set_bulk_data(bulk);
-  mesh = ngp::Mesh(bulk);
-  fm = ngp::FieldManager(bulk);
-  sierra::nalu::matrix_free::fill_id_fields(
-    mesh, meta.universal_part(), gid_field, tpetra_gid_field);
+  mesh = bulk.get_updated_ngp_mesh();
+  gid_field_ngp = stk::mesh::get_updated_ngp_field<gid_type>(gid_field);
+  sierra::nalu::matrix_free::populate_global_id_field(
+    mesh, meta.universal_part(), gid_field_ngp);
 }
 
 stk::mesh::Field<double, stk::mesh::Cartesian3d>&

@@ -15,7 +15,7 @@
 #include "Tpetra_Operator.hpp"
 
 #include "stk_mesh/base/MetaData.hpp"
-#include "stk_ngp/NgpFieldParallel.hpp"
+#include "stk_mesh/base/NgpFieldParallel.hpp"
 
 #include <memory>
 
@@ -27,18 +27,13 @@ namespace test_solution_update {
 static constexpr Kokkos::Array<double, 3> gammas = {{0, 0, 0}};
 }
 
-class ConductionSolutionUpdateFixture : public ::ConductionFixture
+class SolutionUpdateFixture : public ::ConductionFixture
 {
 protected:
-  ConductionSolutionUpdateFixture()
+  SolutionUpdateFixture()
     : ConductionFixture(nx, scale),
       field_update(
-        Teuchos::ParameterList{},
-        mesh,
-        gid_field,
-        tpetra_gid_field,
-        meta.universal_part(),
-        {})
+        Teuchos::ParameterList{}, mesh, gid_field_ngp, meta.universal_part())
   {
     auto& coordField =
       *meta.get_field<stk::mesh::Field<double, stk::mesh::Cartesian3d>>(
@@ -58,41 +53,39 @@ protected:
         *stk::mesh::field_data(lambda_field, node) = 1.0;
       }
     }
-    fields.coordinate_ordinal = coordinate_field().mesh_meta_data_ordinal();
-    fields.ordinals = conduction_field_ordinals(meta);
   }
   ConductionSolutionUpdate<order> field_update;
   LinearizedResidualFields<order> coefficient_fields;
-  ResidualFields<order> fields;
+  InteriorResidualFields<order> fields;
   static constexpr int nx = 32;
   static constexpr double scale = M_PI;
 };
 
-TEST_F(ConductionSolutionUpdateFixture, solution_state_solver_construction)
+TEST_F(SolutionUpdateFixture, solution_state_solver_construction)
 {
   ASSERT_EQ(field_update.solver().num_iterations(), 0);
 }
 
-TEST_F(ConductionSolutionUpdateFixture, correct_behavior_for_linear_problem)
+TEST_F(SolutionUpdateFixture, correct_behavior_for_linear_problem)
 {
   const auto conn = stk_connectivity_map<order>(mesh, meta.universal_part());
-  fields = gather_required_conduction_fields<order>(
-    conn, fm, fields.coordinate_ordinal, fields.ordinals);
+  fields = gather_required_conduction_fields<order>(meta, conn);
   coefficient_fields.volume_metric = fields.volume_metric;
   coefficient_fields.diffusion_metric = fields.diffusion_metric;
 
-  auto& delta = fm.get_field<double>(qtmp_field.mesh_meta_data_ordinal());
+  auto delta = stk::mesh::get_updated_ngp_field<double>(qtmp_field);
   field_update.compute_residual(
-    test_solution_update::gammas, fields, BCFields{}, BCFluxFields<order>{});
+    test_solution_update::gammas, fields, BCDirichletFields{},
+    BCFluxFields<order>{});
   field_update.compute_delta(
     test_solution_update::gammas[0], coefficient_fields, delta);
 
   if (mesh.get_bulk_on_host().parallel_size() > 1) {
-    ngp::copy_owned_to_shared(
-      mesh.get_bulk_on_host(), std::vector<ngp::Field<double>*>{&delta});
+    stk::mesh::communicate_field_data<double>(
+      mesh.get_bulk_on_host(), {&delta});
   }
-
   delta.sync_to_host();
+  delta.sync_to_device();
 
   auto& coord_field =
     *meta.get_field<stk::mesh::Field<double, stk::mesh::Cartesian3d>>(

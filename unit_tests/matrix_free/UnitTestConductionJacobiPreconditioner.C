@@ -1,40 +1,27 @@
-#include <math.h>
-#include <stdlib.h>
-
-#include <Kokkos_Array.hpp>
-#include <Kokkos_View.hpp>
-#include <Teuchos_ArrayView.hpp>
-#include <Teuchos_DefaultMpiComm.hpp>
-#include <Teuchos_OrdinalTraits.hpp>
-#include <Teuchos_Ptr.hpp>
-#include <Teuchos_RCP.hpp>
-#include <Teuchos_RCPDecl.hpp>
-#include <Tpetra_ConfigDefs.hpp>
-#include <Tpetra_Map_decl.hpp>
-#include <Tpetra_MultiVector_decl.hpp>
-#include <algorithm>
-#include <random>
-#include <stk_mesh/base/Bucket.hpp>
-#include <stk_mesh/base/FieldState.hpp>
-#include <stk_mesh/base/Types.hpp>
-#include <stk_util/parallel/Parallel.hpp>
-
-#include "matrix_free/ConductionFields.h"
 #include "matrix_free/ConductionJacobiPreconditioner.h"
-#include "matrix_free/StkEntityToRowMap.h"
 
-#include "matrix_free/StkSimdConnectivityMap.h"
-#include "matrix_free/StkToTpetraMap.h"
 #include "StkConductionFixture.h"
 #include "matrix_free/KokkosFramework.h"
 #include "matrix_free/MakeRCP.h"
+#include "matrix_free/StkSimdConnectivityMap.h"
+#include "matrix_free/StkToTpetraMap.h"
 #include "gtest/gtest.h"
-#include "mpi.h"
+
+#include "Kokkos_Core.hpp"
+#include <Teuchos_RCP.hpp>
+#include <Tpetra_ConfigDefs.hpp>
+#include <Tpetra_Map_decl.hpp>
+
+#include "matrix_free/ConductionFields.h"
+
+#include "gtest/gtest.h"
 #include "stk_mesh/base/BulkData.hpp"
 #include "stk_mesh/base/Field.hpp"
 #include "stk_mesh/base/FieldBase.hpp"
 #include "stk_mesh/base/MetaData.hpp"
 #include "stk_topology/topology.hpp"
+
+#include <algorithm>
 
 namespace sierra {
 namespace nalu {
@@ -49,38 +36,41 @@ protected:
 
   JacobiFixture()
     : ConductionFixture(nx, scale),
-      conn(stk_connectivity_map<order>(mesh, meta.universal_part())),
-      elid(entity_to_row_lid_mapping(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
-      offsets(create_offset_map<order>(mesh, meta.universal_part(), elid)),
-      owned_map(owned_row_map(mesh, gid_field, meta.universal_part())),
-      shared_map(owned_and_shared_row_map(
-        mesh, gid_field, tpetra_gid_field, meta.universal_part())),
-      exporter(shared_map, owned_map),
-      coordinate_ordinal(coordinate_field().mesh_meta_data_ordinal()),
-      residual_ordinals(conduction_field_ordinals(meta)),
-      coefficient_ordinals(conduction_coefficient_ordinals(meta))
+      owned_map(make_owned_row_map(mesh, meta.universal_part())),
+      owned_and_shared_map(make_owned_and_shared_row_map(
+        mesh, meta.universal_part(), gid_field_ngp)),
+      exporter(
+        Teuchos::rcpFromRef(owned_and_shared_map),
+        Teuchos::rcpFromRef(owned_map)),
+      owned_lhs(Teuchos::rcpFromRef(owned_map), 1),
+      owned_rhs(Teuchos::rcpFromRef(owned_map), 1),
+      owned_and_shared_lhs(Teuchos::rcpFromRef(owned_and_shared_map), 1),
+      owned_and_shared_rhs(Teuchos::rcpFromRef(owned_and_shared_map), 1),
+      elid(make_stk_lid_to_tpetra_lid_map(
+        mesh,
+        meta.universal_part(),
+        gid_field_ngp,
+        owned_and_shared_map.getLocalMap())),
+      conn(stk_connectivity_map<order>(mesh, meta.universal_part()))
   {
   }
 
+  const Tpetra::Map<> owned_map;
+  const Tpetra::Map<> owned_and_shared_map;
+  const Tpetra::Export<> exporter;
+  Tpetra::MultiVector<> owned_lhs;
+  Tpetra::MultiVector<> owned_rhs;
+  Tpetra::MultiVector<> owned_and_shared_lhs;
+  Tpetra::MultiVector<> owned_and_shared_rhs;
+
+  const const_entity_row_view_type elid;
   elem_mesh_index_view<order> conn;
-  entity_row_view_type elid;
   elem_offset_view<order> offsets;
-
-  Teuchos::RCP<const Tpetra::Map<>> owned_map;
-  Teuchos::RCP<const Tpetra::Map<>> shared_map;
-  Tpetra::Export<> exporter;
-
-  int coordinate_ordinal{-1};
-  Kokkos::Array<int, conduction_info::num_physics_fields> residual_ordinals;
-  Kokkos::Array<int, conduction_info::num_coefficient_fields>
-    coefficient_ordinals;
 };
 
 TEST_F(JacobiFixture, jacobi_operator_is_stricly_positive_for_laplacian)
 {
-  auto fields = gather_required_conduction_fields<order>(
-    conn, fm, coordinate_ordinal, residual_ordinals);
+  auto fields = gather_required_conduction_fields<order>(meta, conn);
   LinearizedResidualFields<order> coefficient_fields;
   coefficient_fields.volume_metric = fields.volume_metric;
   coefficient_fields.diffusion_metric = fields.diffusion_metric;

@@ -9,7 +9,7 @@
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/FieldTraits.hpp>
 #include <stk_mesh/base/Types.hpp>
-#include <stk_ngp/Ngp.hpp>
+#include <stk_mesh/base/Ngp.hpp>
 #include <stk_util/util/ReportHandler.hpp>
 #include <string>
 #include <vector>
@@ -23,7 +23,7 @@
 #include "stk_mesh/base/Selector.hpp"
 #include "stk_mesh/base/SkinBoundary.hpp"
 #include "stk_mesh/base/Types.hpp"
-#include "stk_ngp/Ngp.hpp"
+#include "stk_mesh/base/Ngp.hpp"
 #include "stk_topology/topology.hpp"
 
 #include "gtest/gtest.h"
@@ -35,15 +35,7 @@ namespace matrix_free {
 class SimdConnectivityFixture : public ::testing::Test
 {
 protected:
-  SimdConnectivityFixture()
-    : meta(3u),
-      bulk(meta, MPI_COMM_WORLD),
-      gid_field(meta.declare_field<stk::mesh::Field<stk::mesh::EntityId>>(
-        stk::topology::NODE_RANK, "global_ids")),
-      tpetra_gid_field(
-        meta.declare_field<
-          stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>>(
-          stk::topology::NODE_RANK, "tpetra_global_ids"))
+  SimdConnectivityFixture() : meta(3u), bulk(meta, MPI_COMM_WORLD)
   {
     stk::topology topo(stk::topology::HEX_8);
 
@@ -65,8 +57,6 @@ protected:
     auto& coordField = meta.declare_field<vector_field_type>(
       stk::topology::NODE_RANK, "coordinates");
     stk::mesh::put_field_on_mesh(coordField, block_1, nullptr);
-    stk::mesh::put_field_on_mesh(gid_field, block_1, 1, nullptr);
-    stk::mesh::put_field_on_mesh(tpetra_gid_field, block_1, 1, nullptr);
     stk::mesh::put_field_on_mesh(
       coordField, stk::mesh::selectUnion(allSurfaces), nullptr);
     meta.set_coordinate_field(&coordField);
@@ -105,22 +95,11 @@ protected:
           nodeLocations.at(j).at(d);
       }
     }
-
-    for (const auto* ib :
-         bulk.get_buckets(stk::topology::NODE_RANK, meta.universal_part())) {
-      for (auto node : *ib) {
-        *stk::mesh::field_data(gid_field, node) = bulk.identifier(node);
-      }
-    }
-    mesh = ngp::Mesh(bulk);
-    fill_id_fields(mesh, meta.universal_part(), gid_field, tpetra_gid_field);
+    mesh = stk::mesh::NgpMesh(bulk);
   }
   stk::mesh::MetaData meta;
   stk::mesh::BulkData bulk;
-  stk::mesh::Field<stk::mesh::EntityId>& gid_field;
-  stk::mesh::Field<typename Tpetra::Map<>::global_ordinal_type>&
-    tpetra_gid_field;
-  ngp::Mesh mesh;
+  stk::mesh::NgpMesh mesh;
 };
 
 TEST_F(SimdConnectivityFixture, map_has_correct_outermost_index)
@@ -168,18 +147,23 @@ TEST_F(SimdConnectivityFixture, map_has_invalid_entries_for_nonexisting_element)
 
 TEST_F(SimdConnectivityFixture, map_is_in_tensor_product_form)
 {
-  ngp::ConstStkFieldAdapter<double> coords(bulk, *meta.coordinate_field());
+  const auto& coord_field =
+    *static_cast<const stk::mesh::Field<double, stk::mesh::Cartesian>*>(
+      meta.coordinate_field());
   constexpr int order = 1;
   const auto map = stk_connectivity_map<order>(mesh, meta.universal_part());
   auto map_h = Kokkos::create_mirror_view(map);
   Kokkos::deep_copy(map_h, map);
+
   for (int k = 0; k < 2; ++k) {
     for (int j = 0; j < 2; ++j) {
       for (int i = 0; i < 2; ++i) {
         const auto index = map_h(0, k, j, i, 0);
-        ASSERT_EQ(coords.get(index, 0), (i == 0) ? -1 : +1);
-        ASSERT_EQ(coords.get(index, 1), (j == 0) ? -1 : +1);
-        ASSERT_EQ(coords.get(index, 2), (k == 0) ? -1 : +1);
+        const auto* coord =
+          stk::mesh::field_data(coord_field, index.bucket_id, index.bucket_ord);
+        ASSERT_EQ(coord[0], (i == 0) ? -1 : +1);
+        ASSERT_EQ(coord[1], (j == 0) ? -1 : +1);
+        ASSERT_EQ(coord[2], (k == 0) ? -1 : +1);
       }
     }
   }
