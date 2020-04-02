@@ -638,6 +638,14 @@ class Realm {
   // check for mesh changing
   bool mesh_changed() const;
 
+  // high order
+  int polynomial_order() const;
+  bool matrix_free() const;
+  bool matrixFree_{false};
+
+
+  Teuchos::ParameterList solver_parameters(std::string) const;
+
   stk::mesh::PartVector allPeriodicInteractingParts_;
   stk::mesh::PartVector allNonConformalInteractingParts_;
 

@@ -7,11 +7,10 @@
 // for more details.
 //
 
-
-
 #include <Realm.h>
 #include <Simulation.h>
 #include <NaluEnv.h>
+#include <stk_mesh/base/GetNgpField.hpp>
 
 // percept
 #if defined (NALU_USES_PERCEPT)
@@ -31,6 +30,7 @@
 #include <ErrorIndicatorAlgorithmDriver.h>
 #include <FieldTypeDef.h>
 #include <LinearSystem.h>
+#include <LinearSolvers.h>
 #include <master_element/MasterElement.h>
 #include <master_element/MasterElementFactory.h>
 #include <MaterialPropertys.h>
@@ -109,6 +109,8 @@
 #include "ngp_utils/NgpFieldBLAS.h"
 #include "ngp_algorithms/GeometryAlgDriver.h"
 #include "ngp_algorithms/GeometryInteriorAlg.h"
+
+
 #include "ngp_algorithms/GeometryBoundaryAlg.h"
 
 // stk_util
@@ -130,6 +132,8 @@
 #include <stk_mesh/base/CreateEdges.hpp>
 #include <stk_mesh/base/SkinBoundary.hpp>
 #include <stk_mesh/base/FieldBLAS.hpp>
+#include <stk_mesh/base/GetNgpField.hpp>
+
 
 // stk_io
 #include <stk_io/StkMeshIoBroker.hpp>
@@ -262,7 +266,7 @@ namespace nalu{
     balanceNodeOptions_(),
     wallTimeStart_(stk::wall_time()),
     doPromotion_(false),
-    promotionOrder_(0u),
+    promotionOrder_(1u),
     inputMeshIdx_(std::numeric_limits<size_t>::max()),
     node_(node)
 {
@@ -712,9 +716,17 @@ Realm::load(const YAML::Node & node)
   get_if_present(node, "use_edges", realmUsesEdges_, realmUsesEdges_);
 
   get_if_present(node, "polynomial_order", promotionOrder_, promotionOrder_);
-  if (promotionOrder_ >=1) {
-    throw std::runtime_error("Mesh promotion not available");
+  if (promotionOrder_ > 2) {
     doPromotion_ = true;
+  }
+
+  if (promotionOrder_ >= 5) {
+    throw std::runtime_error("Only polynomial orders 1-4 supported");
+  }
+
+  get_if_present(node, "matrix_free", matrixFree_, matrixFree_);
+  if (polynomial_order() > 1 && !matrixFree_) {
+    throw std::runtime_error("Polynomial orders > 1 must be matrix free");
   }
 
   // let everyone know about core algorithm
@@ -2808,6 +2820,10 @@ void
 Realm::register_interior_algorithm(
   stk::mesh::Part *part)
 {
+  if (matrixFree_) {
+    return;
+  }
+
   const AlgorithmType algType = INTERIOR;
   geometryAlgDriver_->register_elem_algorithm<GeometryInteriorAlg>(
       algType, part, "geometry");
@@ -2824,6 +2840,9 @@ Realm::register_wall_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2855,6 +2874,9 @@ Realm::register_inflow_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2886,6 +2908,9 @@ Realm::register_open_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  if (matrixFree_) {
+    return;
+  }
 
   //====================================================
   // Register face (boundary condition) data
@@ -2918,7 +2943,9 @@ Realm::register_symmetry_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
-
+  if (matrixFree_) {
+    return;
+  }
   //====================================================
   // Register face (boundary condition) data
   //====================================================
@@ -3014,6 +3041,7 @@ Realm::register_non_conformal_bc(
   stk::mesh::Part *part,
   const stk::topology &theTopo)
 {
+  ThrowRequire(!matrixFree_);
 
   // push back the part for book keeping and, later, skin mesh
   bcPartVec_.push_back(part);
@@ -3197,6 +3225,15 @@ Realm::provide_output()
         ioBroker_->process_output_request(resultsFileIndex_, currentTime);
       }
       else {
+        for (auto& stringFieldPair : promotionIO_->get_output_fields()) {
+          auto& field = *stringFieldPair.second;
+          if (field.type_is<double>()) {
+            stk::mesh::get_updated_ngp_field<double>(field).sync_to_host();
+          }
+          else if (field.type_is<int>()) {
+            stk::mesh::get_updated_ngp_field<int>(field).sync_to_host();
+          }
+        }
         promotionIO_->write_database_data(currentTime);
       }
       equationSystems_.provide_output();
@@ -3291,6 +3328,20 @@ Realm::provide_restart_output()
 
 }
 
+template <typename T = double>
+stk::mesh::NgpField<T>&
+get_ngp_field(
+  const stk::mesh::MetaData& meta,
+  std::string name,
+  stk::mesh::FieldState state = stk::mesh::StateNP1)
+{
+  ThrowAssert(meta.get_field(stk::topology::NODE_RANK, name));
+  ThrowAssert(
+    meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+  return stk::mesh::get_updated_ngp_field<T>(
+    *meta.get_field(stk::topology::NODE_RANK, name)->field_state(state));
+}
+
 //--------------------------------------------------------------------------
 //-------- swap_states -----------------------------------------------------
 //--------------------------------------------------------------------------
@@ -3299,10 +3350,7 @@ Realm::swap_states()
 {
   bulkData_->update_field_data_states();
 
-#ifdef KOKKOS_ENABLE_CUDA
   if (get_time_step_count() < 2) return;
-
-  const auto& fieldMgr = ngp_field_manager();
   for (const auto fld: metaData_->get_fields()) {
     const unsigned numStates = fld->number_of_states();
     const auto fieldID = fld->mesh_meta_data_ordinal();
@@ -3312,17 +3360,11 @@ Realm::swap_states()
     if ((numStates < 2) || (fieldID != fieldNp1ID)) continue;
 
     for (unsigned i=(numStates - 1); i > 0; --i) {
-      auto& toField = fieldMgr.get_field<double>(
-        fld->field_state(static_cast<stk::mesh::FieldState>(i))
-        ->mesh_meta_data_ordinal());
-      auto& fromField = fieldMgr.get_field<double>(
-        fld->field_state(static_cast<stk::mesh::FieldState>(i-1))
-        ->mesh_meta_data_ordinal());
-
+      auto& toField = stk::mesh::get_updated_ngp_field<double>(*fld->field_state(static_cast<stk::mesh::FieldState>(i)));
+      auto& fromField = stk::mesh::get_updated_ngp_field<double>(*fld->field_state(static_cast<stk::mesh::FieldState>(i-1)));
       toField.swap(fromField);
     }
   }
-#endif
 }
 
 //--------------------------------------------------------------------------
@@ -4841,6 +4883,26 @@ Realm::handle_all_element_part_alias(const std::vector<std::string>& names) cons
   return names;
 }
 
+//--------------------------------------------------------------------------
+//-------- polynomial_order() ----------------------------------------------
+//--------------------------------------------------------------------------
+int Realm::polynomial_order() const
+{
+  return promotionOrder_;
+}
+
+//--------------------------------------------------------------------------
+//-------- matrix_free() ---------------------------------------------------
+//--------------------------------------------------------------------------
+bool Realm::matrix_free() const
+{
+  return matrixFree_;
+}
+
+Teuchos::ParameterList Realm::solver_parameters(std::string name) const
+{
+  return root()->linearSolvers_->get_solver_configuration(equationSystems_.get_solver_block_name(name));
+}
 
 } // namespace nalu
 } // namespace Sierra

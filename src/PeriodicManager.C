@@ -719,7 +719,7 @@ PeriodicManager::periodic_parallel_communicate_field(
 //--------------------------------------------------------------------------
 void
 PeriodicManager::ngp_periodic_parallel_communicate_field(
-  stk::mesh::FieldBase *theField)
+  stk::mesh::FieldBase *theField) const
 {
   if ( NULL != periodicGhosting_ ) {
     const ngp::FieldManager& fieldMgr = realm_.ngp_field_manager();
@@ -774,7 +774,7 @@ PeriodicManager::parallel_communicate_field(
 //--------------------------------------------------------------------------
 void
 PeriodicManager::ngp_parallel_communicate_field(
-  stk::mesh::FieldBase *theField)
+  stk::mesh::FieldBase *theField) const
 {
   const stk::mesh::BulkData & bulk_data = realm_.bulk_data();
   const unsigned pSize = bulk_data.parallel_size();
@@ -879,7 +879,7 @@ PeriodicManager::ngp_apply_constraints(
   const unsigned &sizeOfField,
   const bool &bypassFieldCheck,
   const bool &addSlaves,
-  const bool &setSlaves)
+  const bool &setSlaves) const
 {
 
   // update periodically ghosted fields within add_ and set_
@@ -985,7 +985,7 @@ void
 PeriodicManager::ngp_add_slave_to_master(
   stk::mesh::FieldBase *theField,
   const unsigned &sizeOfField,
-  const bool &bypassFieldCheck)
+  const bool &bypassFieldCheck) const
 {
   ngp_periodic_parallel_communicate_field(theField);
 
@@ -1100,7 +1100,7 @@ void
 PeriodicManager::ngp_set_slave_to_master(
   stk::mesh::FieldBase *theField,
   const unsigned &sizeOfField,
-  const bool &bypassFieldCheck)
+  const bool &bypassFieldCheck) const
 {
   ngp_periodic_parallel_communicate_field(theField);
 
