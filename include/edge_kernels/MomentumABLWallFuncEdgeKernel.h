@@ -26,12 +26,15 @@ class MomentumABLWallFuncEdgeKernel: public NGPKernel<MomentumABLWallFuncEdgeKer
 {
 public:
   MomentumABLWallFuncEdgeKernel(
+    bool slip,
     stk::mesh::MetaData&,
+    std::string,
     const double&,
     const double&,
     const double&,
     const double&,
-    ElemDataRequests& faceDataPreReqs);
+    ElemDataRequests&,
+    ElemDataRequests&);
 
   KOKKOS_FORCEINLINE_FUNCTION MomentumABLWallFuncEdgeKernel() = default;
 
@@ -41,14 +44,27 @@ public:
 
   KOKKOS_FUNCTION
   virtual void execute(
-    SharedMemView<DoubleType**, DeviceShmem>&,
-    SharedMemView<DoubleType*, DeviceShmem>&,
-    ScratchViews<DoubleType, DeviceTeamHandleType, DeviceShmem>&);
+  SharedMemView<DoubleType**, DeviceShmem>&,
+  SharedMemView<DoubleType*, DeviceShmem>&,
+  ScratchViews<DoubleType, DeviceTeamHandleType, DeviceShmem>&,
+  ScratchViews<DoubleType, DeviceTeamHandleType, DeviceShmem>&,
+  int);
+
+  void no_slip(
+  SharedMemView<DoubleType**, DeviceShmem>&,
+  SharedMemView<DoubleType*, DeviceShmem>&,
+  ScratchViews<DoubleType, DeviceTeamHandleType, DeviceShmem>&,
+  ScratchViews<DoubleType, DeviceTeamHandleType, DeviceShmem>&,
+  int);
+
 
 private:
+  bool slip_{true};
+  unsigned coordinates_    {stk::mesh::InvalidOrdinal};
   unsigned velocityNp1_    {stk::mesh::InvalidOrdinal};
   unsigned bcVelocity_     {stk::mesh::InvalidOrdinal};
   unsigned density_        {stk::mesh::InvalidOrdinal};
+  unsigned viscosity_      {stk::mesh::InvalidOrdinal};
   unsigned bcHeatFlux_     {stk::mesh::InvalidOrdinal};
   unsigned specificHeat_   {stk::mesh::InvalidOrdinal};
   unsigned exposedAreaVec_ {stk::mesh::InvalidOrdinal};
@@ -72,6 +88,7 @@ private:
   const DoubleType gamma_h_{16.0};
 
   MasterElement* meFC_{nullptr};
+  MasterElement* meSCS_{nullptr};
 };
 
 }  // nalu

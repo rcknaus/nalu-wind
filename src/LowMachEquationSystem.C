@@ -1876,9 +1876,11 @@ MomentumEquationSystem::register_wall_bc(
       bcDataAlg_.push_back(auxAlg);
     }
   }
+  
+  const bool slip_implementation = true;
 
   // Only set velocityNp1 at the wall boundary if we are not using any wall functions
-  if (!anyWallFunctionActivated) {
+  if (!anyWallFunctionActivated || !slip_implementation) {
     // copy velocity_bc to velocity np1
     CopyFieldAlgorithm *theCopyAlg
       = new CopyFieldAlgorithm(realm_, part,
@@ -1896,6 +1898,8 @@ MomentumEquationSystem::register_wall_bc(
       algTypePNG, part, "momentum_nodal_grad", theBcField, &dudxNone,
       edgeNodalGradient_);
   }
+
+
 
   // Dirichlet or wall function bc
   if ( anyWallFunctionActivated ) {
@@ -1962,23 +1966,35 @@ MomentumEquationSystem::register_wall_bc(
 
       if (realm_.realmUsesEdges_) {
         auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
-        AssembleElemSolverAlgorithm* solverAlg = nullptr;
+
+        stk::topology elemTopo = get_elem_topo(realm_, *part);
+
+        AssembleFaceElemSolverAlgorithm* faceElemSolverAlg = nullptr;
         bool solverAlgWasBuilt = false;
+        std::tie(faceElemSolverAlg, solverAlgWasBuilt) =
+          build_or_add_part_to_face_elem_solver_alg(
+            wfAlgType, *this, *part, elemTopo, solverAlgMap, "wall_func");
 
-        std::tie(solverAlg, solverAlgWasBuilt) =
-          build_or_add_part_to_face_bc_solver_alg(
-            *this, *part, solverAlgMap, "wall_fcn");
-
-        ElemDataRequests& dataPreReqs = solverAlg->dataNeededByKernels_;
-        auto& activeKernels = solverAlg->activeKernels_;
+        auto& activeKernels = faceElemSolverAlg->activeKernels_;
 
         if (solverAlgWasBuilt) {
-          build_face_topo_kernel_automatic<MomentumABLWallFuncEdgeKernel>
-            (partTopo, *this, activeKernels, "momentum_abl_wall",
-             realm_.meta_data(), grav, z0, referenceTemperature,
-             realm_.get_turb_model_constant(TM_kappa), dataPreReqs);
+          build_face_elem_topo_kernel_automatic<MomentumABLWallFuncEdgeKernel>(
+            partTopo, elemTopo, *this, activeKernels, "momentum_abl_wall",
+            slip_implementation,
+            realm_.meta_data(),  
+            realm_.get_coordinates_name(),
+            grav, 
+            z0, 
+            referenceTemperature,
+            realm_.get_turb_model_constant(TM_kappa),
+            faceElemSolverAlg->faceDataNeeded_,
+            faceElemSolverAlg->elemDataNeeded_);
         }
-      }
+
+
+
+
+      } 
       else {
         std::map<AlgorithmType, SolverAlgorithm *>::iterator it_wf =
           solverAlgDriver_->solverAlgMap_.find(wfAlgType);
@@ -2056,6 +2072,22 @@ MomentumEquationSystem::register_wall_bc(
       itd->second->partVec_.push_back(part);
     }
   }
+  
+  if(!slip_implementation) {
+    const AlgorithmType algType = WALL;
+    
+    std::map<AlgorithmType, SolverAlgorithm *>::iterator itd =
+      solverAlgDriver_->solverDirichAlgMap_.find(algType);
+    if ( itd == solverAlgDriver_->solverDirichAlgMap_.end() ) {
+      DirichletBC *theAlg
+        = new DirichletBC(realm_, this, part, &velocityNp1, theBcField, 0, nDim);
+      solverAlgDriver_->solverDirichAlgMap_[algType] = theAlg;
+    }
+    else {
+      itd->second->partVec_.push_back(part);
+    }
+  }
+
 
   // specialty FSI
   if ( userData.isFsiInterface_ ) {

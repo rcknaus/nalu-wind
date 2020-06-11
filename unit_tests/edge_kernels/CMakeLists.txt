@@ -7,7 +7,6 @@ target_sources(${utest_ex_name} PRIVATE
 
   # Face/elem edge BC kernels
   ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestContinuityOpenEdge.C
-  ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestMomentumABLWallFuncEdge.C
   ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestMomentumOpenEdge.C
   ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestMomentumSymmetryEdge.C
   ${CMAKE_CURRENT_SOURCE_DIR}/UnitTestScalarOpenEdge.C
