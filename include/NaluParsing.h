@@ -178,10 +178,12 @@ struct SymmetryUserData : public UserData {
   };
   SymmetryTypes symmType_;
   bool useProjections_;
+  double penaltyFactor_;
   SymmetryUserData()
     : UserData(),
       symmType_(SymmetryTypes::GENERAL_WEAK),
-      useProjections_(false)
+      useProjections_(false),
+      penaltyFactor_(0.0)
   {}
 };
 

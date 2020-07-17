@@ -35,7 +35,8 @@ public:
     VectorFieldType*,
     ScalarFieldType*,
     ElemDataRequests&,
-    ElemDataRequests&);
+    ElemDataRequests&,
+    double penaltyFactor = 0);
 
   KOKKOS_FORCEINLINE_FUNCTION
   MomentumSymmetryEdgeKernel() = default;
@@ -64,6 +65,7 @@ private:
 
   MasterElement* meFC_{nullptr};
   MasterElement* meSCS_{nullptr};
+  double penaltyFactor_;
 };
 
 }  // nalu
