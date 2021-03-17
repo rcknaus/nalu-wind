@@ -109,6 +109,7 @@
 #include <edge_kernels/MomentumEdgeSolverAlg.h>
 #include <edge_kernels/MomentumOpenEdgeKernel.h>
 #include <edge_kernels/MomentumABLWallShearStressEdgeKernel.h>
+#include <edge_kernels/MomentumWallFuncEdgeKernel.h>
 #include <edge_kernels/MomentumSymmetryEdgeKernel.h>
 #include <edge_kernels/MomentumEdgePecletAlg.h>
 #include <edge_kernels/StreletsUpwindEdgeAlg.h>
@@ -2090,7 +2091,6 @@ MomentumEquationSystem::register_wall_bc(
 
       // Engineering-style wall model.
       else {
-
         const AlgorithmType wfAlgType = WALL_FCN;
 
         wallFuncAlgDriver_
@@ -2116,28 +2116,41 @@ MomentumEquationSystem::register_wall_bc(
                realm_.bulk_data(), *realm_.solutionOptions_, dataPreReqs);
             report_built_supp_alg_names();
           }
-        }
-        else {
-          // deprecated element-based and supported edge-based approach
-          std::map<AlgorithmType, SolverAlgorithm *>::iterator it_wf =
-            solverAlgDriver_->solverAlgMap_.find(wfAlgType);
-          if ( it_wf == solverAlgDriver_->solverAlgMap_.end() ) {
-            SolverAlgorithm *theAlg = NULL;
-            if ( realm_.realmUsesEdges_ ) {
-              theAlg = new AssembleMomentumEdgeWallFunctionSolverAlgorithm(realm_, part, this);
-            }
-            else {
-              theAlg = new AssembleMomentumElemWallFunctionSolverAlgorithm(realm_, part, this, realm_.realmUsesEdges_);
-            }
-            solverAlgDriver_->solverAlgMap_[wfAlgType] = theAlg;
+        } else if (realm_.realmUsesEdges_) {
+          auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
+          stk::topology elemTopo = get_elem_topo(realm_, *part);
+
+          AssembleFaceElemSolverAlgorithm* faceElemSolverAlg = nullptr;
+          bool solverAlgWasBuilt = false;
+          std::tie(faceElemSolverAlg, solverAlgWasBuilt) =
+            build_or_add_part_to_face_elem_solver_alg(
+              wfAlgType, *this, *part, elemTopo, solverAlgMap, "wall_func");
+
+          auto& activeKernels = faceElemSolverAlg->activeKernels_;
+          if (solverAlgWasBuilt) {
+            build_face_elem_topo_kernel_automatic<MomentumWallFuncEdgeKernel>(
+              partTopo, elemTopo, *this, activeKernels, "momentum_wall",
+              realm_.meta_data(),
+              userData.isNoSlip_,
+              faceElemSolverAlg->faceDataNeeded_,
+              faceElemSolverAlg->elemDataNeeded_);
+          }
+        } else {
+          // deprecated element-based
+          auto it_wf = solverAlgDriver_->solverAlgMap_.find(wfAlgType);
+          if (it_wf == solverAlgDriver_->solverAlgMap_.end()) {
+            solverAlgDriver_->solverAlgMap_[wfAlgType] = new AssembleMomentumElemWallFunctionSolverAlgorithm(
+                realm_, part, this, realm_.realmUsesEdges_);;
           }
           else {
             it_wf->second->partVec_.push_back(part);
           }
+
         }
       }
     }
   }
+
 
   // Dirichlet wall boundary condition.
   if (!anyWallFunctionActivated || userData.isNoSlip_) {
