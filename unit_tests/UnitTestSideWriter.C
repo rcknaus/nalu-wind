@@ -28,12 +28,12 @@ public:
       &meta->declare_field<stk::mesh::Field<double, stk::mesh::Cartesian3d>>(
         stk::topology::NODE_RANK, "test_vector");
 
-    double minus_one = -1;
+    std::array<double, 3> minus_ones{-1, -1, -1};
     stk::mesh::put_field_on_mesh(
-      *test_field, meta->universal_part(), 1, &minus_one);
+      *test_field, meta->universal_part(), 1, minus_ones.data());
 
     stk::mesh::put_field_on_mesh(
-      *test_vector_field, meta->universal_part(), 3, &minus_one);
+      *test_vector_field, meta->universal_part(), 3, minus_ones.data());
 
     const std::string name = "generated:3x3x3|sideset:xXyYzZ";
     io.set_bulk_data(*bulk);
