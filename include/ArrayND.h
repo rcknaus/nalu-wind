@@ -195,6 +195,20 @@ struct ArrayND<ArrayType, enable_if_rank<ArrayType, 5>>
   }
 };
 
+template <typename ArrayT>
+ArrayND<ArrayT>
+nd_zero()
+{
+  using nd_t = ArrayND<ArrayT>;
+  nd_t v;
+  for (int j = 0; j < nd_t::extent_int(0); ++j) {
+    for (int i = 0; i < nd_t::extent_int(1); ++i) {
+      v(j, i) = 0;
+    }
+  }
+  return v;
+}
+
 } // namespace sierra::nalu
 
 #endif

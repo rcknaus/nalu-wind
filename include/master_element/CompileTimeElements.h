@@ -203,6 +203,44 @@ use_shifted_quad(bool shifted)
   return shifted ? QuadType::SHIFTED : QuadType::MID;
 }
 
+// namespace impl {
+// template <typename AlgTraits>
+// struct AdjacentNodes
+// {
+//   ArrayND<int[AlgTraits::numScsIp_][2]> adjacent_scv{};
+// };
+
+// template <>
+// struct AdjacentNodes<AlgTraitsTet4>
+// {
+//   ArrayND<int[AlgTraitsTet4::numScsIp_][2]> adjacent_scv
+//   {
+//     {{{0, 1}, {1, 2}, {0, 2}, {0, 3}, {1, 3}, {2, 3}}};
+//   };
+// };
+// } // namespace impl
+// template <typename AlgTraits>
+// KOKKOS_FUNCTION constexarrapr auto
+// face_adjacent_volumes()
+// {
+//   return impl::AdjacentNodes<AlgTraits>::adjacent_scv;
+// }
+
+// template <typename AlgTraits>
+// KOKKOS_FUNCTION constexpr int
+// face_adjacent_volume(int face, int lr)
+// {
+//   return impl::AdjacentNodes<AlgTraits>::adjacent_scv(face, lr);
+// }
+
+// enum class LR { LEFT = 0, RIGHT = 1 };
+
+// template <typename AlgTraits>
+// KOKKOS_FUNCTION constexpr int
+// face_adjacent_volume(int face, LR o)
+// {
+//   return impl::AdjacentNodes<AlgTraits>::adjacent_scv(face, int(o));
+// }
 } // namespace sierra::nalu
 
 #endif
