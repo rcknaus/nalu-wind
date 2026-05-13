@@ -185,9 +185,9 @@ hex_volume_grandy(const Rank2T& scvcoords) -> std::
 
   // copy coordinates
   for (int n = 0; n < nNodes; ++n) {
-    coordv[n][0] = scvcoords[n][0];
-    coordv[n][1] = scvcoords[n][1];
-    coordv[n][2] = scvcoords[n][2];
+    coordv[n][0] = scvcoords(n, 0);
+    coordv[n][1] = scvcoords(n, 1);
+    coordv[n][2] = scvcoords(n, 2);
   }
 
   constexpr int nodesPerFace = 4;

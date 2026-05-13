@@ -208,7 +208,74 @@ MeshVelocityEdgeAlg<AlgTraits>::execute()
   edgeFaceVelMag.sync_to_host();
 }
 
-INSTANTIATE_KERNEL(MeshVelocityEdgeAlg)
+template class MeshVelocityEdgeAlg<AlgTraitsHex8>;
+
+#define EMPTY_DECL(TRAITS)                                                     \
+  template <>                                                                  \
+  MeshVelocityEdgeAlg<TRAITS>::MeshVelocityEdgeAlg(                            \
+    Realm& realm, stk::mesh::Part* part)                                       \
+    : Algorithm(realm, part), elemData_(realm_.meta_data())                    \
+  {                                                                            \
+  }                                                                            \
+  template <>                                                                  \
+  void MeshVelocityEdgeAlg<TRAITS>::execute()                                  \
+  {                                                                            \
+  }                                                                            \
+  static_assert(true)
+
+EMPTY_DECL(AlgTraitsTet4);
+EMPTY_DECL(AlgTraitsWed6);
+EMPTY_DECL(AlgTraitsTri3_2D);
+EMPTY_DECL(AlgTraitsQuad4_2D);
+EMPTY_DECL(AlgTraitsPyr5);
+
+void
+edge_to_node()
+{
+  nalu_ngp::run_edge_algorithm(
+    "continuity residual", mesh, stk::topology::EDGE_RANK, interior,
+    KOKKOS_LAMBDA(const EntityInfoType& eInfo) {
+      const auto edge = eInfo.meshIdx;
+      const auto& nodes = eInfo.entityNodes;
+      const auto val = edge_field(edge, 0);
+      projected_field(nodes[0], 0) += val;
+      projected_field(nodes[1], 0) -= val;
+    });
+}
+
+void
+exposed_edge_to_node()
+{
+  nalu_ngp::run_edge_algorithm(
+    "continuity residual bc", mesh, stk::topology::EDGE_RANK, interior,
+    KOKKOS_LAMBDA(const EntityInfoType& eInfo) {
+      const auto edge = eInfo.meshIdx;
+      const auto& nodes = eInfo.entityNodes;
+      const auto val = edge_field(edge, 0);
+      projected_field(nodes[0], 0) += val;
+    });
+}
+
+void
+continuity_residual(
+  const stk::mesh::NgpMesh& mesh,
+  const stk::mesh::Selector& interior,
+  const stk::mesh::Selector& boundary,
+  Kokkos::Array<double, 3> gammas,
+  Kokkos::Array<stk::mesh::NgpField<double>, 3> rho,
+  Kokkos::Array<stk::mesh::NgpField<double>, 3> vol,
+  stk::mesh::NgpField<double> mdot,
+  stk::mesh::NgpField<double> area_v)
+{
+  nalu_ngp::run_edge_algorithm(
+    "continuity residual", mesh, stk::topology::EDGE_RANK, interior,
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
+      double drho_dt = 0;
+      for (int n = 0; n < 3; ++n) {
+        drho_dt += gammas[n] * rho[n](mi, 0) * vol[n](mi, 0);
+      }
+    });
+}
 
 } // namespace nalu
 } // namespace sierra
