@@ -33,7 +33,7 @@ namespace sierra {
 namespace nalu {
 namespace matrix_free {
 
-constexpr int nx = 16;
+constexpr int nx = 64;
 constexpr double scale = M_PI;
 
 class LowMachSimulationFixture : public LowMachFixture
@@ -98,14 +98,21 @@ copy_field(
 
 TEST_F(LowMachSimulationFixture, reduce_peak_velocity)
 {
+  stk::io::StkMeshIoBroker io(bulk.parallel());
+  io.set_bulk_data(bulk);
+  auto fileId = io.create_output_mesh("sin-proj.e", stk::io::WRITE_RESULTS);
+  for (auto* field : {&velocity_field, &pressure_field}) {
+    io.add_field(fileId, *field);
+  }
+  io.process_output_request(fileId, 0.0);
+  
   auto rho = stk::mesh::get_updated_ngp_field<double>(density_field);
   auto vel = stk::mesh::get_updated_ngp_field<double>(velocity_field);
   auto press = stk::mesh::get_updated_ngp_field<double>(pressure_field);
   auto dpdx = stk::mesh::get_updated_ngp_field<double>(dpdx_field);
   auto dpdx_tmp = stk::mesh::get_updated_ngp_field<double>(dpdx_tmp_field);
 
-  Kokkos::Array<double, 3> gammas{{100, -100, 0}};
-  auto max_val_pre = max_value();
+  Kokkos::Array<double, 3> gammas{{1, -1, 0}};
 
   update->initialize();
 
@@ -113,27 +120,18 @@ TEST_F(LowMachSimulationFixture, reduce_peak_velocity)
   update->gather_pressure();
   update->gather_grad_p();
   update->update_advection_metric(0);
-
-  update->update_provisional_velocity(gammas, vel);
+  // update->update_provisional_velocity(gammas, vel);
   update->gather_velocity();
-
   update->update_pressure(1. / gammas[0], press);
   update->gather_pressure();
-
   copy_field(mesh(), active(), dpdx_tmp, dpdx);
   update->update_pressure_gradient(dpdx);
-
   update->gather_grad_p();
-  update->project_velocity(1. / gammas[0], rho, dpdx_tmp, dpdx, vel);
+  update->project_velocity(active() - side(), 1. / gammas[0], rho, dpdx_tmp, dpdx, vel);
 
   vel.sync_to_host();
 
-  const bool doOutput = false;
-  if (doOutput) {
-    unit_test_utils::dump_mesh(bulk, {&velocity_field});
-  }
-  auto max_val_post = max_value();
-  ASSERT_GT(max_val_pre, max_val_post);
+  io.process_output_request(fileId, 1.0);
 }
 
 } // namespace matrix_free

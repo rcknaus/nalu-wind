@@ -1019,15 +1019,10 @@ Realm::setup_interior_algorithms()
         all_part_vec.end(), fsi_part_vec.begin(), fsi_part_vec.end());
     }
 
+    if (spatialDimension_ == 3){
+
     for (auto p : all_part_vec) {
-      if (p->topology() != stk::topology::HEX_8) {
-        NaluEnv::self().naluOutputP0()
-          << "Skipping registration of MeshVelocityEdgeAlg on part "
-          << p->name()
-          << ". GCL operations are currently only supported on HEX_8 "
-             "elements.\n";
-        continue;
-      }
+      
       if (realmUsesEdges_) {
         geometryAlgDriver_->register_elem_algorithm<MeshVelocityEdgeAlg>(
           algType, p, "mesh_vel");

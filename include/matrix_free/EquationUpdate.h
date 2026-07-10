@@ -83,6 +83,15 @@ public:
     stk::mesh::NgpField<double>,
     stk::mesh::NgpField<double>&) = 0;
 
+   virtual void project_velocity(
+    const stk::mesh::Selector&,
+    double,
+    stk::mesh::NgpField<double>,
+    stk::mesh::NgpField<double>,
+    stk::mesh::NgpField<double>,
+    stk::mesh::NgpField<double>&) = 0;
+
+
   virtual void gather_velocity() = 0;
   virtual void gather_pressure() = 0;
   virtual void gather_grad_p() = 0;

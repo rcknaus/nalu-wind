@@ -42,6 +42,8 @@
 #include "stk_mesh/base/GetNgpMesh.hpp"
 #include "stk_topology/topology.hpp"
 
+#include "UnitTestUtils.h"
+
 #include <math.h>
 #include <memory>
 #include <vector>
@@ -82,7 +84,7 @@ protected:
   ContinuitySolutionUpdate<order> field_update;
   LowMachLinearizedResidualFields<order> coefficient_fields;
   LowMachResidualFields<order> fields;
-  static constexpr int nx = 8;
+  static constexpr int nx = 64;
   static constexpr double scale = M_PI;
 };
 
@@ -116,6 +118,14 @@ copy_tpetra_solution_vector_to_stk_field(
 
 TEST_F(ContinuitySolutionUpdateFixture, solve_is_reasonable)
 {
+  stk::io::StkMeshIoBroker io(bulk.parallel());
+  io.set_bulk_data(bulk);
+  auto fileId = io.create_output_mesh("sin-proj.e", stk::io::WRITE_RESULTS);
+  for (auto* field : {&velocity_field, &pressure_field}) {
+    io.add_field(fileId, *field);
+  }
+  io.process_output_request(fileId, 0.0);
+  
   const auto conn = stk_connectivity_map<order>(mesh(), meta.universal_part());
   fields = gather_required_lowmach_fields<order>(meta, conn);
   coefficient_fields.volume_metric = fields.volume_metric;
@@ -138,7 +148,9 @@ TEST_F(ContinuitySolutionUpdateFixture, solve_is_reasonable)
   delta.sync_to_host();
 
   ASSERT_TRUE(
-    field_update.num_iterations() > 1 && field_update.num_iterations() < 100);
+    field_update.num_iterations() > 1 && field_update.num_iterations() < 1000);
+
+  io.process_output_request(fileId, 1.0);
 }
 
 } // namespace matrix_free

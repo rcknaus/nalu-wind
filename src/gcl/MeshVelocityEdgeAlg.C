@@ -51,6 +51,32 @@ namespace nalu {
 //   }
 // }
 
+
+auto filter_parts_by_topology(
+  const stk::mesh::ConstPartVector& parts, stk::topology::topology_t topo)
+{
+  stk::mesh::ConstPartVector filtered_parts;
+  filtered_parts.reserve(parts.size());
+  for (const auto* part : parts) {
+    STK_ThrowRequire(part);
+    bool valid_topo = part->topology() != stk::topology::INVALID_TOPOLOGY;
+    if (part->topology() == topo) {
+      filtered_parts.push_back(part);
+    }
+    for (const auto* subpart : part->subsets()) {
+      STK_ThrowRequire(subpart);
+      valid_topo |= subpart->topology() != stk::topology::INVALID_TOPOLOGY;
+      if (subpart->topology() == topo) {
+        filtered_parts.push_back(subpart);
+      }
+    }
+    STK_ThrowRequireMsg(
+      valid_topo, "Cannot call algorithm on invalid topology part '"
+                    << part->name() << "'");
+  }
+  return filtered_parts;
+}
+
 template <typename AlgTraits>
 MeshVelocityEdgeAlg<AlgTraits>::MeshVelocityEdgeAlg(
   Realm& realm, stk::mesh::Part* part)
@@ -87,10 +113,6 @@ MeshVelocityEdgeAlg<AlgTraits>::MeshVelocityEdgeAlg(
   elemData_.add_gathered_nodal_field(meshDispNp1_, AlgTraits::nDim_);
   elemData_.add_gathered_nodal_field(meshDispN_, AlgTraits::nDim_);
   elemData_.add_master_element_call(SCS_AREAV, CURRENT_COORDINATES);
-
-  if (!std::is_same<AlgTraits, AlgTraitsHex8>::value) {
-    throw std::runtime_error("MeshVelocityEdgeAlg is only supported for Hex8");
-  }
 }
 
 template <typename AlgTraits>
@@ -161,16 +183,17 @@ MeshVelocityEdgeAlg<AlgTraits>::execute()
         static constexpr auto face_node =
           SubInterp<AlgTraits>::scs_face_node_map;
 
-        ArrayND<DoubleType[8][3]> scs_vol_coords{};
-
-        for (int n = 0; n < 4; ++n) {
-          for (int d = 0; d < dim; ++d) {
-            scs_vol_coords(n, d) = scs_coords_np0(face_node(ip, n), d);
+        if (!std::is_same_v<AlgTraits, AlgTraitsPyr5>) {
+          ArrayND<DoubleType[8][3]> scs_vol_coords{};
+          for (int n = 0; n < 4; ++n) {
+            for (int d = 0; d < dim; ++d) {
+              scs_vol_coords(n, d) = scs_coords_np0(face_node(ip, n), d);
+            }
           }
-        }
-        for (int n = 0; n < 4; ++n) {
-          for (int d = 0; d < dim; ++d) {
-            scs_vol_coords(n + 4, d) = scs_coords_np1(face_node(ip, n), d);
+          for (int n = 0; n < 4; ++n) {
+            for (int d = 0; d < dim; ++d) {
+              scs_vol_coords(n + 4, d) = scs_coords_np1(face_node(ip, n), d);
+            }
           }
         }
 
@@ -253,27 +276,6 @@ exposed_edge_to_node()
       const auto& nodes = eInfo.entityNodes;
       const auto val = edge_field(edge, 0);
       projected_field(nodes[0], 0) += val;
-    });
-}
-
-void
-continuity_residual(
-  const stk::mesh::NgpMesh& mesh,
-  const stk::mesh::Selector& interior,
-  const stk::mesh::Selector& boundary,
-  Kokkos::Array<double, 3> gammas,
-  Kokkos::Array<stk::mesh::NgpField<double>, 3> rho,
-  Kokkos::Array<stk::mesh::NgpField<double>, 3> vol,
-  stk::mesh::NgpField<double> mdot,
-  stk::mesh::NgpField<double> area_v)
-{
-  nalu_ngp::run_edge_algorithm(
-    "continuity residual", mesh, stk::topology::EDGE_RANK, interior,
-    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
-      double drho_dt = 0;
-      for (int n = 0; n < 3; ++n) {
-        drho_dt += gammas[n] * rho[n](mi, 0) * vol[n](mi, 0);
-      }
     });
 }
 

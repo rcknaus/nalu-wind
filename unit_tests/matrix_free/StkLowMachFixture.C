@@ -115,17 +115,18 @@ LowMachFixture::LowMachFixture(int nx, double scale)
       const double tFac = 1;
       const double cX = coordptr[0];
       const double cY = coordptr[1];
+      const double cZ = coordptr[2];
 
-      const double radius = std::sqrt(cX * cX + cY * cY) / (rVortex_);
-      const double factor = beta_ / (rVortex_ * tFac * tFac) *
-                            std::exp(0.5 * (1.0 - radius * radius / tFac));
+      // const double radius = std::sqrt(cX * cX + cY * cY) / (rVortex_);
+      // const double factor = beta_ / (rVortex_ * tFac * tFac) *
+      //                       std::exp(0.5 * (1.0 - radius * radius / tFac));
 
-      const double velX = -factor * cY + uInf;
-      const double velY = factor * cX;
+      // const double velX = -factor * cY + uInf;
+      // const double velY = factor * cX;
 
-      stk::mesh::field_data(velocity_field, node)[0] = velX;
-      stk::mesh::field_data(velocity_field, node)[1] = velY;
-      stk::mesh::field_data(velocity_field, node)[2] = 0;
+      stk::mesh::field_data(velocity_field, node)[0] = std::sin(cX) * std::sin(cY) * std::sin(cZ);
+      stk::mesh::field_data(velocity_field, node)[1] = std::sin(cX) * std::sin(cY) * std::sin(cZ);
+      stk::mesh::field_data(velocity_field, node)[2] = std::sin(cX) * std::sin(cY) * std::sin(cZ);
 
       for (int d = 0; d < 3; ++d) {
         stk::mesh::field_data(

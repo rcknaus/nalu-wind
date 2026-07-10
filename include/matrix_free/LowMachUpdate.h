@@ -95,6 +95,14 @@ public:
     stk::mesh::NgpField<double> gp_star,
     stk::mesh::NgpField<double>& u);
 
+  void project_velocity(
+    const stk::mesh::Selector& sel,
+    double proj_time_scale,
+    stk::mesh::NgpField<double> rho,
+    stk::mesh::NgpField<double> gp,
+    stk::mesh::NgpField<double> gp_star,
+    stk::mesh::NgpField<double>& u);
+
   void gather_velocity();
   void gather_pressure();
   void gather_grad_p();

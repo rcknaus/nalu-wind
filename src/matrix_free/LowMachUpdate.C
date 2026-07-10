@@ -371,6 +371,33 @@ LowMachUpdate<p>::project_velocity(
   u.modify_on_device();
 }
 
+template <int p>
+void
+LowMachUpdate<p>::project_velocity(
+  const stk::mesh::Selector& sel,
+  double proj_time_scale,
+  stk::mesh::NgpField<double> rho,
+  stk::mesh::NgpField<double> gp,
+  stk::mesh::NgpField<double> gp_star,
+  stk::mesh::NgpField<double>& u)
+{
+  constexpr int dim = 3;
+  stk::mesh::ProfilingBlock pf("project_velocity");
+  rho.sync_to_device();
+  gp_star.sync_to_device();
+  gp.sync_to_device();
+  stk::mesh::for_each_entity_run(
+    stk::mesh::get_updated_ngp_mesh(bulk_), stk::topology::NODE_RANK,
+    sel, KOKKOS_LAMBDA(stk::mesh::FastMeshIndex mi) {
+      const auto fac = proj_time_scale / rho(mi, 0);
+      for (int d = 0; d < dim; ++d) {
+        u.get(mi, d) -= fac * (gp_star(mi, d) - gp(mi, d));
+      };
+    });
+  u.modify_on_device();
+}
+
+
 void
 copy_stk_field_to_owned_tpetra_vector(
   const stk::mesh::NgpMesh& mesh,
